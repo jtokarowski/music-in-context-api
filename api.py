@@ -24,11 +24,11 @@ app.config.from_object(__name__)
 
 # Server-side Parameters based on where it's running
 if ENV == 'dev':
-    CLIENT_SIDE_URL = "http://127.0.0.1"
     PORT = 7000
-elif ENV == 'heroku':
-    CLIENT_SIDE_URL = "https://musicincontext.herokuapp.com"
 
+@app.route("/")
+def pingroute():
+    return "OK"
 
 @app.route("/data", methods=["POST"])
 def response():
