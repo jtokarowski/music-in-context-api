@@ -36,7 +36,7 @@ def response():
     #grab the refresh token from the request body + intialize auth class
     spotifyRefreshToken = request.json['refresh_token']
     mode = request.json['mode']
-    formData = request.json['formdata']
+    formData = request.json['form_data']
 
     #using access token, initialize data class
     authorization = auth()
@@ -51,7 +51,6 @@ def response():
     audioFeaturesColors = ['rgba(102, 255, 153, 1)','rgba(255, 153, 51, 1)','rgba(102, 153, 255, 1)','rgba(204, 0, 0, 1)','rgba(153, 102, 255, 1)','rgba(0, 0, 102, 1)','rgba(115, 115, 115, 1)']
 
     #select mode here CLUSTER or PLAYLIST
-    print(mode)
     if mode == 'cluster':
         #DO STUFF
         print("entering CLUSTER mode")
