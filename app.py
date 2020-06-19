@@ -48,7 +48,18 @@ def response():
      
     # #list of audio features used to fit curve, shared across modes
     spotifyAudioFeatures = ['acousticness','danceability','energy','instrumentalness','liveness','speechiness','valence']
-    audioFeaturesColors = ['rgba(102, 255, 153, 1)','rgba(255, 153, 51, 1)','rgba(102, 153, 255, 1)','rgba(204, 0, 0, 1)','rgba(153, 102, 255, 1)','rgba(0, 0, 102, 1)','rgba(115, 115, 115, 1)','rgba(102, 255, 153, 1)','rgba(255, 153, 51, 1)','rgba(102, 153, 255, 1)','rgba(204, 0, 0, 1)','rgba(153, 102, 255, 1)','rgba(0, 0, 102, 1)','rgba(115, 115, 115, 1)']
+    #################################
+    ## TOKYO AT NIGHT COLOR SCHEME ##
+    #################################
+    #blue rgba(94, 177, 208, 1)
+    #purple rgba(112, 87, 146, 1)
+    #green rgba(127, 185, 84, 1)
+    #orange rgba(199, 115, 73, 1)
+    #pink rgba(214, 90, 119, 1)
+    #teal rgba(27, 124, 146, 1)
+    #grey rgba(177, 180, 198, 1)
+
+    audioFeaturesColors = ['rgba(94, 177, 208, 1)','rgba(112, 87, 146, 1)','rgba(127, 185, 84, 1)','rgba(199, 115, 73, 1)','rgba(214, 90, 119, 1)','rgba(27, 124, 146, 1)','rgba(177, 180, 198, 1)']
 
     #select mode here CLUSTER or PLAYLIST
     if mode == 'cluster':
@@ -307,7 +318,12 @@ def response():
 
         #TODO make colors beautiful
         trackDataForRadar['borderColor'] = audioFeaturesColors[colorIndex]
+        
+        #wrap and rerun the colors list
         colorIndex += 1
+        if colorIndex >= len(audioFeaturesColors):
+            colorIndex = 0
+
         trackDataForRadar['fill'] = 'false'
         
         trackDataForRadar['data'] = []
