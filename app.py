@@ -75,27 +75,31 @@ def response():
         dataframeWithClusters = statistics.df
         clusterCenterCoordinates = statistics.centers
 
-        print(dataframeWithClusters)
-        input()
+        #print(dataframeWithClusters.to_dict('records')) This brings us back to list of python dicts
 
         #create playlists for each kmeans assignment
-        spotifyCreate = create(spotifyAccessToken)
+        #spotifyCreate = create(spotifyAccessToken)
         repeatgenres = {}
+        minimumDistanceTracks = []
         for i in range(clusters):
-            descript = ""
+            dataBySubGenre = {'audioFeatures':{}}
             selectedClusterCenter = clusterCenterCoordinates[i]
+            #description = ""
             for j in range(len(spotifyAudioFeatures)):
-                entry = str(" "+str(spotifyAudioFeatures[j])+":"+str(round(selectedClusterCenter[j],3))+" ")
-                descript += entry
+                dataBySubGenre['audioFeatures'][spotifyAudioFeatures[j]] = round(selectedClusterCenter[j],3)
+                #entry = str(" "+str(spotifyAudioFeatures[j])+":"+str(round(selectedClusterCenter[j],3))+" ")
+                
+                #description += entry
                 #we can return less detail here, maybe 'highly danceable' is sufficient
 
-            descript +=" created on {}".format(NICEDATE)
-            descript+=" by JTokarowski "
+            #description +=" created on {}".format(NICEDATE)
+            #description+=" by JTokarowski "
 
             dataframeFilteredToSingleCluster = dataframeWithClusters.loc[dataframeWithClusters['kMeansAssignment'] == i]
 
 
             #TODO IMPROVE THIS
+            ####################################################################
             genres = dataframeFilteredToSingleCluster['genres'].values.tolist()
             genreslist = genres[0]
 
@@ -123,22 +127,87 @@ def response():
 
             maxGenre = maxGenre.replace("_", " ")
 
-            newPlaylistInfo = spotifyCreate.newPlaylist(userName, "+| "+str(maxGenre)+" |+",descript)
-            newPlaylistID = spotifyDataRetrieval.URItoID(newPlaylistInfo['uri'])
+            #TODO fix this, temp hack to get it working. receiver needs to accept genreName
+            dataBySubGenre['trackName'] = maxGenre
+            minimumDistanceTracks.append(dataBySubGenre)
+    
+        ################################################################
+        ##           STEP TWO SEND SET TO FRONTEND                    ##
+        ################################################################
 
+        #declare framework for outgoing data
+        outgoingData = {
+            #line chart data
+            'dataByAttribute':{
+                'datasets':[]
+            },
+            #radar chart data
+            #TODO bug caused by FE looking for this with lowercase, should camelcase it
+            'databyTrack':{
+                'labels':spotifyAudioFeatures,
+                'datasets':[]
+            }}
 
-            dataframeFilteredToSingleCluster = dataframeFilteredToSingleCluster['trackID']
-            newPlaylistTracksIDList = dataframeFilteredToSingleCluster.values.tolist()
+        #create a dict of lists to store line chart data
+        dataOrganizedByAttribute = {}
+        for attribute in spotifyAudioFeatures:
+            dataOrganizedByAttribute[attribute] = []
+        dataOrganizedByAttribute['trackName'] = []
 
-            outputPlaylistTracks=[]
-            for spotifyID in newPlaylistTracksIDList:
-                outputPlaylistTracks.append(spotifyDataRetrieval.idToURI("track",spotifyID))
+        #reformat data into outgoing structure
+        colorIndex = 0
+        for track in minimumDistanceTracks:
+            trackDataForRadar = {}
 
-            if len(outputPlaylistTracks)>0:
-                n = 50 #spotify playlist addition limit
-                for j in range(0, len(outputPlaylistTracks), n):  
-                    playlistTracksSegment = outputPlaylistTracks[j:j + n]
-                    spotifyCreate.addTracks(newPlaylistID, playlistTracksSegment)
+            trackDataForRadar['label'] = track['trackName']
+            dataOrganizedByAttribute['trackName'].append(track['trackName'])
+
+            #TODO make colors beautiful
+            trackDataForRadar['borderColor'] = audioFeaturesColors[colorIndex]
+            colorIndex += 1
+            trackDataForRadar['fill'] = 'false'
+            
+            trackDataForRadar['data'] = []
+            for audioFeature in spotifyAudioFeatures:
+                trackDataForRadar['data'].append(track['audioFeatures'][audioFeature])
+                dataOrganizedByAttribute[audioFeature].append(track['audioFeatures'][audioFeature])
+            outgoingData['databyTrack']['datasets'].append(trackDataForRadar)
+
+        #form the data by attribute (for line chart)
+        outgoingData['dataByAttribute']['labels'] = dataOrganizedByAttribute['trackName']
+        colorIndex = 0
+        for audioFeature in spotifyAudioFeatures:
+            dataForLineChart = {}
+            dataForLineChart['label'] = audioFeature
+            # loop thru colors for line graph
+            dataForLineChart['borderColor'] = audioFeaturesColors[colorIndex]
+            colorIndex += 1
+
+            dataForLineChart['fill'] = 'false'
+            dataForLineChart['data'] = dataOrganizedByAttribute[audioFeature]
+
+            outgoingData['dataByAttribute']['datasets'].append(dataForLineChart)
+
+        return json.dumps(outgoingData)
+
+            ####################################################################
+
+            # Temporarily removing spotify creation
+            #newPlaylistInfo = spotifyCreate.newPlaylist(userName, "+| "+str(maxGenre)+" |+",descript)
+            #newPlaylistID = spotifyDataRetrieval.URItoID(newPlaylistInfo['uri'])
+
+            #dataframeFilteredToSingleCluster = dataframeFilteredToSingleCluster['trackID']
+            #newPlaylistTracksIDList = dataframeFilteredToSingleCluster.values.tolist()
+
+            # outputPlaylistTracks=[]
+            # for spotifyID in newPlaylistTracksIDList:
+            #     outputPlaylistTracks.append(spotifyDataRetrieval.idToURI("track",spotifyID))
+
+            # if len(outputPlaylistTracks)>0:
+            #     n = 50 #spotify playlist addition limit
+            #     for j in range(0, len(outputPlaylistTracks), n):  
+            #         playlistTracksSegment = outputPlaylistTracks[j:j + n]
+            #         spotifyCreate.addTracks(newPlaylistID, playlistTracksSegment)
 
 
     elif mode == 'playlist':
@@ -274,6 +343,7 @@ def response():
         dataOrganizedByAttribute['trackName'] = []
 
         #reformat data into outgoing structure
+        colorIndex = 0
         for track in minimumDistanceTracks:
             trackDataForRadar = {}
 
@@ -281,7 +351,8 @@ def response():
             dataOrganizedByAttribute['trackName'].append(track['trackName'])
 
             #TODO make colors beautiful
-            trackDataForRadar['borderColor'] = 'rgba(25, 25, 25, 1)'
+            trackDataForRadar['borderColor'] = audioFeaturesColors[colorIndex]
+            colorIndex += 1
             trackDataForRadar['fill'] = 'false'
             
             trackDataForRadar['data'] = []
