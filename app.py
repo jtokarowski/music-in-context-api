@@ -89,22 +89,33 @@ def response():
         #print(dataframeWithClusters.to_dict('records')) This brings us back to list of python dicts
 
         #create playlists for each kmeans assignment
-        #spotifyCreate = create(spotifyAccessToken)
+        spotifyCreate = create(spotifyAccessToken)
         repeatgenres = {}
         minimumDistanceTracks = []
         for i in range(clusters):
             dataBySubGenre = {'audioFeatures':{}}
             selectedClusterCenter = clusterCenterCoordinates[i]
-            #description = ""
+            description = ""
             for j in range(len(spotifyAudioFeatures)):
                 dataBySubGenre['audioFeatures'][spotifyAudioFeatures[j]] = round(selectedClusterCenter[j],3)
-                #entry = str(" "+str(spotifyAudioFeatures[j])+":"+str(round(selectedClusterCenter[j],3))+" ")
-                
-                #description += entry
+
+                audioFeatureName = spotifyAudioFeatures[j]
+                audioFeatureValue = selectedClusterCenter[j]
+
+                #convert cluster details to low, medium, high descriptor
+                if audioFeatureValue < 0.33:
+                    descriptor = 'low'
+                elif audioFeatureValue < 0.66:
+                    descriptor = 'moderate'
+                else:
+                    descriptor = 'high'
+
+                entry = str(" "+descriptor+" "+str(spotifyAudioFeatures[j])+"; ")
+                description += entry
                 #we can return less detail here, maybe 'highly danceable' is sufficient
 
-            #description +=" created on {}".format(NICEDATE)
-            #description+=" by JTokarowski "
+            description +=" created on {}".format(NICEDATE)
+            description+=" by JTokarowski "
 
             dataframeFilteredToSingleCluster = dataframeWithClusters.loc[dataframeWithClusters['kMeansAssignment'] == i]
 
@@ -142,25 +153,21 @@ def response():
             dataBySubGenre['trackName'] = maxGenre
             minimumDistanceTracks.append(dataBySubGenre)
     
+            newPlaylistInfo = spotifyCreate.newPlaylist(userName, "+| "+str(maxGenre)+" |+", description)
+            newPlaylistID = spotifyDataRetrieval.URItoID(newPlaylistInfo['uri'])
 
-            ####################################################################
+            dataframeFilteredToSingleCluster = dataframeFilteredToSingleCluster['trackID']
+            newPlaylistTracksIDList = dataframeFilteredToSingleCluster.values.tolist()
 
-            # Temporarily removing spotify creation
-            #newPlaylistInfo = spotifyCreate.newPlaylist(userName, "+| "+str(maxGenre)+" |+",descript)
-            #newPlaylistID = spotifyDataRetrieval.URItoID(newPlaylistInfo['uri'])
-
-            #dataframeFilteredToSingleCluster = dataframeFilteredToSingleCluster['trackID']
-            #newPlaylistTracksIDList = dataframeFilteredToSingleCluster.values.tolist()
-
-            # outputPlaylistTracks=[]
-            # for spotifyID in newPlaylistTracksIDList:
-            #     outputPlaylistTracks.append(spotifyDataRetrieval.idToURI("track",spotifyID))
-
-            # if len(outputPlaylistTracks)>0:
-            #     n = 50 #spotify playlist addition limit
-            #     for j in range(0, len(outputPlaylistTracks), n):  
-            #         playlistTracksSegment = outputPlaylistTracks[j:j + n]
-            #         spotifyCreate.addTracks(newPlaylistID, playlistTracksSegment)
+            outputPlaylistTracks=[]
+            for spotifyID in newPlaylistTracksIDList:
+                outputPlaylistTracks.append(spotifyDataRetrieval.idToURI("track",spotifyID))
+            
+            if len(outputPlaylistTracks)>0:
+                n = 50 #spotify playlist addition limit
+                for k in range(0, len(outputPlaylistTracks), n):  
+                    playlistTracksSegment = outputPlaylistTracks[k:k + n]
+                    spotifyCreate.addTracks(newPlaylistID, playlistTracksSegment)
 
 
     elif mode == 'playlist':
