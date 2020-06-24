@@ -298,6 +298,8 @@ def response():
 
     #declare framework for outgoing data
     outgoingData = {
+        'spotifyAudioFeatures': spotifyAudioFeatures,
+        'rawDataByTrack': minimumDistanceTracks,
         #line chart data
         'dataByAttribute':{
             'datasets':[]
