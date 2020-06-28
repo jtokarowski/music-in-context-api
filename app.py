@@ -59,7 +59,7 @@ def response():
     #teal rgba(27, 124, 146, 1)
     #grey rgba(177, 180, 198, 1)
 
-    audioFeaturesColors = ['rgba(94, 177, 208, 1)','rgba(112, 87, 146, 1)','rgba(127, 185, 84, 1)','rgba(199, 115, 73, 1)','rgba(214, 90, 119, 1)','rgba(27, 124, 146, 1)','rgba(177, 180, 198, 1)']
+    colors = ['rgba(94, 177, 208, 1)','rgba(112, 87, 146, 1)','rgba(127, 185, 84, 1)','rgba(199, 115, 73, 1)','rgba(214, 90, 119, 1)','rgba(27, 124, 146, 1)','rgba(177, 180, 198, 1)']
 
     #select mode here CLUSTER or PLAYLIST
     if mode == 'cluster':
@@ -300,61 +300,8 @@ def response():
     outgoingData = {
         'spotifyAudioFeatures': spotifyAudioFeatures,
         'rawDataByTrack': minimumDistanceTracks,
-        #line chart data
-        'dataByAttribute':{
-            'datasets':[]
-        },
-        #radar chart data
-        #TODO bug caused by FE looking for this with lowercase, should camelcase it
-        'databyTrack':{
-            'labels':spotifyAudioFeatures,
-            'datasets':[]
-        }}
-
-    #create a dict of lists to store line chart data
-    dataOrganizedByAttribute = {}
-    for attribute in spotifyAudioFeatures:
-        dataOrganizedByAttribute[attribute] = []
-    dataOrganizedByAttribute['trackName'] = []
-
-    #reformat data into outgoing structure
-    colorIndex = 0
-    for track in minimumDistanceTracks:
-        trackDataForRadar = {}
-
-        trackDataForRadar['label'] = track['trackName']
-        dataOrganizedByAttribute['trackName'].append(track['trackName'])
-
-        #TODO make colors beautiful
-        trackDataForRadar['borderColor'] = audioFeaturesColors[colorIndex]
-        
-        #wrap and rerun the colors list
-        colorIndex += 1
-        if colorIndex >= len(audioFeaturesColors):
-            colorIndex = 0
-
-        trackDataForRadar['fill'] = 'false'
-        
-        trackDataForRadar['data'] = []
-        for audioFeature in spotifyAudioFeatures:
-            trackDataForRadar['data'].append(track['audioFeatures'][audioFeature])
-            dataOrganizedByAttribute[audioFeature].append(track['audioFeatures'][audioFeature])
-        outgoingData['databyTrack']['datasets'].append(trackDataForRadar)
-
-    #form the data by attribute (for line chart)
-    outgoingData['dataByAttribute']['labels'] = dataOrganizedByAttribute['trackName']
-    colorIndex = 0
-    for audioFeature in spotifyAudioFeatures:
-        dataForLineChart = {}
-        dataForLineChart['label'] = audioFeature
-        # loop thru colors for line graph
-        dataForLineChart['borderColor'] = audioFeaturesColors[colorIndex]
-        colorIndex += 1
-
-        dataForLineChart['fill'] = 'false'
-        dataForLineChart['data'] = dataOrganizedByAttribute[audioFeature]
-
-        outgoingData['dataByAttribute']['datasets'].append(dataForLineChart)
+        'colors': colors,
+        }
 
     return json.dumps(outgoingData)
 
