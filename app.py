@@ -301,6 +301,7 @@ def response():
         'spotifyAudioFeatures': spotifyAudioFeatures,
         'rawDataByTrack': minimumDistanceTracks,
         'colors': colors,
+        'mode': mode,
         }
 
     return json.dumps(outgoingData)
