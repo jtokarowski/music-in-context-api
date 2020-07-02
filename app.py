@@ -30,6 +30,43 @@ if ENV == 'dev':
 def pingroute():
     return "OK"
 
+@app.route("/getuserplaylists", methods=["POST"])
+def getUserPlaylists():
+    #grab the refresh token from the request body + intialize auth class
+    #spotifyRefreshToken = request.json['refresh_token']
+    #spotifyRefreshToken='AQCQz2XlemifOBzJrHn5ISjHpe9hRoRyulnsyFEFyCYjRTuzCpWmUx78hJS9iPI8xMC0vs7r5xnGBEkiM00sq_Abpuqf1uEsdj6X2UaD4fYgl5msjGYIn5WAG3-WkCPlREM'
+    spotifyRefreshToken = request.json['refresh_token']
+    #mode = request.json['mode']
+
+    #using access token, initialize data class
+    authorization = auth()
+    refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
+    spotifyAccessToken = refreshedSpotifyTokens['access_token']
+    spotifyDataRetrieval = data(spotifyAccessToken)
+    profile = spotifyDataRetrieval.profile()
+    userName = profile.get("userName")
+
+    allUserPlaylists = spotifyDataRetrieval.currentUserPlaylists()
+    outgoingData = {
+        'userPlaylists':[],
+        'refreshToken': spotifyRefreshToken
+        }
+    for playlist in allUserPlaylists:
+        checkboxFormatPlaylist = {
+            'playlistID': spotifyDataRetrieval.URItoID(playlist['uri']),
+            'playlistName':playlist['playlistName']
+            }
+        outgoingData['userPlaylists'].append(checkboxFormatPlaylist)
+
+
+    return json.dumps(outgoingData)
+
+@app.route("/selecteduserplaylists", methods=["POST"])
+def selectedUserPlaylists():
+    print(request.json)
+    print('OK')
+    return(json.dumps({'status': 'ok'}))
+
 @app.route("/data", methods=["POST"])
 def response():
     
