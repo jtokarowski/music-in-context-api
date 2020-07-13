@@ -35,12 +35,11 @@ cleanMasterTrackPoolIDs = []
 userContext = None
 
 #mongo
-client = MongoClient('localhost', 27017) #TODO make this dynamic based on ENV
+client = MongoClient('localhost', 27017) #TODO make this dynamic based on ENV, link to cloud instance
 db = client.musicInContext
 
 @app.route("/")
 def pingroute():
-
     return "OK"
 
 @app.route("/changeset", methods=['POST'])
@@ -92,13 +91,8 @@ def getUserContext():
 
     print('arrived in user context')
 
-    #check if we have user in the DB, else build their context
-    #TODO link to DB
-    userContextCollection = db['userContext']
-
     spotifyRefreshToken = request.json['refresh_token']
     #mode = request.json['mode']
-
     #using access token, initialize data class
     authorization = auth()
     refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
@@ -107,6 +101,16 @@ def getUserContext():
     profile = spotifyDataRetrieval.profile()
     userName = profile.get("userName")
 
+    #TODO check if we have user in the DB, else build their context
+    userContextCollection = db['userContext']
+    cursor = userContextCollection.find({})
+
+    for userContext in cursor:
+        if userName == userContext['userName']:
+            print('found the user')
+            return 'OK'
+    
+    #assuming we don't find the user, build the context
     #get all user playlists
     allUserPlaylists = spotifyDataRetrieval.currentUserPlaylists()
     playlistIDs = []
