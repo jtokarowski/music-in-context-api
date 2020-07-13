@@ -8,8 +8,31 @@ import time
 import os
 from flask_cors import CORS
 
+#mongo
+from pymongo import MongoClient
+client = MongoClient('localhost', 27017)
+db = client.userContext
+
+#TODO temp hack to test song changer
+cleanMasterTrackPool = []
+cleanMasterTrackPoolIDs = []
+userContext = None
+
 ENV = os.environ.get('ENV')
-SECRET_KEY = ' ' #This doesn't actually get used, but simpleForm needs this to run
+
+#################################
+## TOKYO AT NIGHT COLOR SCHEME ##
+#################################
+    #blue rgba(94, 177, 208, 1)
+    #purple rgba(112, 87, 146, 1)
+    #green rgba(127, 185, 84, 1)
+    #orange rgba(199, 115, 73, 1)
+    #pink rgba(214, 90, 119, 1)
+    #teal rgba(27, 124, 146, 1)
+    #grey rgba(177, 180, 198, 1)
+
+# #list of audio features used to fit curve, shared across modes
+spotifyAudioFeatures = ['acousticness','danceability','energy','instrumentalness','liveness','speechiness','valence']
 
 #grab date program is being run
 td = date.today()
@@ -28,7 +51,124 @@ if ENV == 'dev':
 
 @app.route("/")
 def pingroute():
+
     return "OK"
+
+@app.route("/changeset", methods=['POST'])
+def changeset():
+
+    previousTrackList = request.json['previousTrackList']
+    spotifyRefreshToken = request.json['refresh_token']
+
+    #using access token, initialize data class
+    authorization = auth()
+    refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
+    spotifyAccessToken = refreshedSpotifyTokens['access_token']
+    spotifyDataRetrieval = data(spotifyAccessToken)
+
+    previousSetIndex = 0
+    for previousTrack in previousTrackList:
+        
+        if previousTrack['audioFeatures']['shouldChange'] == 1:
+            minED = 9999999999
+            
+            #TODO make this more efficient with mapreduce
+            poolIndex = 0
+            for newTrack in cleanMasterTrackPool:
+                newTrack['audioFeatures']['shouldChange'] = 0
+                if newTrack['isUsed'] == True:
+                    poolIndex += 1
+                    continue
+                else:
+                    euclideanDistance = spotifyDataRetrieval.calculateEuclideanDistance(newTrack, previousTrack, spotifyAudioFeatures, "absValue")
+                    if euclideanDistance < minED:
+                        newTrack['isUsed'] = True #TODO this blocks track from being used elsewhere
+                        minED = euclideanDistance
+                        minEDIndex = poolIndex
+                        previousTrackList[previousSetIndex] = newTrack
+                        poolIndex += 1
+
+            previousSetIndex+=1
+                        
+            cleanMasterTrackPool[poolIndex]['isUsed'] = True
+            
+    # print('########## AFTER')
+    # for pt in previousTrackList:
+    #     print(pt['trackName'])
+
+    return json.dumps(previousTrackList)
+
+@app.route("/usercontext", methods=["POST"])
+def getUserContext():
+
+    #check if we have user in the DB, else build their context
+    #TODO link to DB
+
+    spotifyRefreshToken = request.json['refresh_token']
+    #mode = request.json['mode']
+
+    #using access token, initialize data class
+    authorization = auth()
+    refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
+    spotifyAccessToken = refreshedSpotifyTokens['access_token']
+    spotifyDataRetrieval = data(spotifyAccessToken)
+    profile = spotifyDataRetrieval.profile()
+    userName = profile.get("userName")
+
+    #get all user playlists
+    allUserPlaylists = spotifyDataRetrieval.currentUserPlaylists()
+    playlistIDs = []
+    for playlist in allUserPlaylists:
+        playlistIDs.append(spotifyDataRetrieval.URItoID(playlist['uri']))
+
+    #get top user artists
+    shortTermTopArtists = spotifyDataRetrieval.getMyTop(topType='artists', term='short_term', limit=10)
+    mediumTermTopArtists = spotifyDataRetrieval.getMyTop(topType='artists', term='medium_term', limit=10)
+    longTermTopArtists = spotifyDataRetrieval.getMyTop(topType='artists', term='long_term', limit=10)
+
+    #combine and remove dupes
+    userTopArtists = shortTermTopArtists
+    userTopArtists.extend(mediumTermTopArtists)
+    userTopArtists.extend(longTermTopArtists)
+    userTopArtists = list(set(userTopArtists))
+
+    #build a pool of recommendations
+    recommendedTrackURIs = []
+    for artist in userTopArtists:  
+        recommendedTracks = spotifyDataRetrieval.getRecommendations(limit = 10, seed_artists = artist)
+        if len(recommendedTracks) == 0 or recommendedTracks == None:
+            continue
+        else:
+            for track in recommendedTracks:
+                if track['uri'] not in recommendedTrackURIs:
+                    recommendedTrackURIs.append(track['uri'])
+    
+    #print("Loaded {} unique track recommendations".format(len(recommendedTrackURIs)))
+    #store the pool in spotify and store the playlist ID
+    spotifyCreate = create(spotifyAccessToken)
+    newPlaylistInfo = spotifyCreate.newPlaylist(userName, "+| music in context - record box |+", 'Pool of recommended tracks | Music in Context')
+    newPlaylistID = spotifyDataRetrieval.URItoID(newPlaylistInfo['uri'])
+    
+    if len(recommendedTrackURIs)>0:
+        n = 50 #spotify playlist addition limit
+        for i in range(0, len(recommendedTrackURIs), n):  
+            spotifyCreate.addTracks(newPlaylistID, recommendedTrackURIs[i:i + n])
+
+    userContext = {
+        'userName':userName,
+        'playlistIDs': playlistIDs,
+        'topArtists':{
+            'shortTerm': shortTermTopArtists,
+            'mediumTerm': mediumTermTopArtists,
+            'longTerm': longTermTopArtists
+        },
+        'recommendedTracks': newPlaylistID,
+        'discardedTracks':[],
+        'lastUpdated': 20200712,
+        'currentSet': []
+    }
+
+    return 'OK'
 
 @app.route("/getuserplaylists", methods=["POST"])
 def getUserPlaylists():
@@ -79,19 +219,6 @@ def response():
     spotifyDataRetrieval = data(spotifyAccessToken)
     profile = spotifyDataRetrieval.profile()
     userName = profile.get("userName")
-     
-    # #list of audio features used to fit curve, shared across modes
-    spotifyAudioFeatures = ['acousticness','danceability','energy','instrumentalness','liveness','speechiness','valence']
-    #################################
-    ## TOKYO AT NIGHT COLOR SCHEME ##
-    #################################
-    #blue rgba(94, 177, 208, 1)
-    #purple rgba(112, 87, 146, 1)
-    #green rgba(127, 185, 84, 1)
-    #orange rgba(199, 115, 73, 1)
-    #pink rgba(214, 90, 119, 1)
-    #teal rgba(27, 124, 146, 1)
-    #grey rgba(177, 180, 198, 1)
 
     colors = ['rgba(94, 177, 208, 1)','rgba(112, 87, 146, 1)','rgba(127, 185, 84, 1)','rgba(199, 115, 73, 1)','rgba(214, 90, 119, 1)','rgba(27, 124, 146, 1)','rgba(177, 180, 198, 1)']
 
@@ -273,19 +400,18 @@ def response():
         #build up list of user top artists
         topListenType = 'artists'
         userTopArtists = []
-        #userTopArtists.extend(spotifyDataRetrieval.getMyTop(topType=topListenType, term='short_term', limit=1))
-        userTopArtists.extend(spotifyDataRetrieval.getMyTop(topType=topListenType, term='medium_term', limit=1))
-        userTopArtists.extend(spotifyDataRetrieval.getMyTop(topType=topListenType, term='long_term', limit=1))
+        userTopArtists.extend(spotifyDataRetrieval.getMyTop(topType=topListenType, term='short_term', limit=5))
+        userTopArtists.extend(spotifyDataRetrieval.getMyTop(topType=topListenType, term='medium_term', limit=5))
+        userTopArtists.extend(spotifyDataRetrieval.getMyTop(topType=topListenType, term='long_term', limit=5))
         #remove dupes
         userTopArtists = list(set(userTopArtists))
         print("Loaded {} user top artists".format(len(userTopArtists)))
 
         # Build up a large pool of options by grabbing suggestions for each
         # of top artists, target 0 and target 1 to get almost all of pool
-        cleanMasterTrackPool = []
-        cleanMasterTrackPoolIDs = []
+        
         for artist in userTopArtists:  
-            recommendedTracks = spotifyDataRetrieval.getRecommendations(limit = 20, seed_artists = artist)
+            recommendedTracks = spotifyDataRetrieval.getRecommendations(limit = 100, seed_artists = artist)
             
             #continue if we don't get anything back
             if len(recommendedTracks) == 0 or recommendedTracks == None:
@@ -311,6 +437,7 @@ def response():
                             #make sure we don't dupe a track in the new set
                             if cleanTrack['trackID'] not in minimumDistanceTrackIDs:
                                 minimumDistances[arrayIndex] = euclideanDistance
+                                cleanTrack['isUsed'] = True
                                 minimumDistanceTracks[arrayIndex] = cleanTrack
                                 minimumDistanceTrackIDs[arrayIndex] = cleanTrack['trackID']
                         
@@ -329,13 +456,16 @@ def response():
     ################################################################
 
     #shared scross all methods
+    #assign shouldchange indicator
+    for i in range(len(minimumDistanceTracks)):
+        minimumDistanceTracks[i]['audioFeatures']['shouldChange'] = 0
 
     #declare framework for outgoing data
     outgoingData = {
         'spotifyAudioFeatures': spotifyAudioFeatures,
         'rawDataByTrack': minimumDistanceTracks,
         'colors': colors,
-        'mode': mode,
+        'mode': mode
         }
 
     return json.dumps(outgoingData)
