@@ -7,29 +7,9 @@ from statisticalAnalysis import stats
 import time
 import os
 from flask_cors import CORS
-
-#mongo
 from pymongo import MongoClient
-client = MongoClient('localhost', 27017)
-db = client.userContext
-
-#TODO temp hack to test song changer
-cleanMasterTrackPool = []
-cleanMasterTrackPoolIDs = []
-userContext = None
 
 ENV = os.environ.get('ENV')
-
-#################################
-## TOKYO AT NIGHT COLOR SCHEME ##
-#################################
-    #blue rgba(94, 177, 208, 1)
-    #purple rgba(112, 87, 146, 1)
-    #green rgba(127, 185, 84, 1)
-    #orange rgba(199, 115, 73, 1)
-    #pink rgba(214, 90, 119, 1)
-    #teal rgba(27, 124, 146, 1)
-    #grey rgba(177, 180, 198, 1)
 
 # #list of audio features used to fit curve, shared across modes
 spotifyAudioFeatures = ['acousticness','danceability','energy','instrumentalness','liveness','speechiness','valence']
@@ -48,6 +28,15 @@ app.config.from_object(__name__)
 # Server-side Parameters based on where it's running
 if ENV == 'dev':
     PORT = 7000
+
+#TODO temp hack to test song changer, to be replaced by mongo
+cleanMasterTrackPool = []
+cleanMasterTrackPoolIDs = []
+userContext = None
+
+#mongo
+client = MongoClient('localhost', 27017) #TODO make this dynamic based on ENV
+db = client.musicInContext
 
 @app.route("/")
 def pingroute():
@@ -101,8 +90,11 @@ def changeset():
 @app.route("/usercontext", methods=["POST"])
 def getUserContext():
 
+    print('arrived in user context')
+
     #check if we have user in the DB, else build their context
     #TODO link to DB
+    userContextCollection = db['userContext']
 
     spotifyRefreshToken = request.json['refresh_token']
     #mode = request.json['mode']
@@ -167,6 +159,9 @@ def getUserContext():
         'lastUpdated': 20200712,
         'currentSet': []
     }
+
+    pymongoResponse = userContextCollection.insert_one(userContext)
+    print(pymongoResponse)
 
     return 'OK'
 
