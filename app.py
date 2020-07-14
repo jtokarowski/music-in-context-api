@@ -29,11 +29,6 @@ app.config.from_object(__name__)
 if ENV == 'dev':
     PORT = 7000
 
-#TODO temp hack to test song changer, to be replaced by mongo
-cleanMasterTrackPool = []
-cleanMasterTrackPoolIDs = []
-userContext = None
-
 #mongo
 client = MongoClient('localhost', 27017) #TODO make this dynamic based on ENV, link to cloud instance
 db = client.musicInContext
@@ -45,14 +40,37 @@ def pingroute():
 @app.route("/changeset", methods=['POST'])
 def changeset():
 
-    previousTrackList = request.json['previousTrackList']
+    #TODO this can be a method that we reference here instead of repeating
     spotifyRefreshToken = request.json['refresh_token']
-
+    mode = request.json['mode']
     #using access token, initialize data class
     authorization = auth()
     refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
     spotifyAccessToken = refreshedSpotifyTokens['access_token']
     spotifyDataRetrieval = data(spotifyAccessToken)
+    profile = spotifyDataRetrieval.profile()
+    userName = profile.get("userName")
+
+    #check if we have user in the DB, else build their context
+    userContextCollection = db['userContext']
+    cursor = userContextCollection.find({})
+
+    thisUserContext = None
+    for userContext in cursor:
+        if userName == userContext['userName']:
+            print('found the user')
+            thisUserContext = userContext
+
+    #retrieve previous set from request body
+    previousTrackList = request.json['previousTrackList']
+    previousTrackIDs = request.json['previousTrackIDs']
+    print(previousTrackIDs)
+
+    #grab the pool of recs from spotify
+    recommendedTrackPlaylistID = thisUserContext['recommendedTracks']
+    recommendedTracks = spotifyDataRetrieval.getPlaylistTracks(spotifyDataRetrieval.idToURI("playlist", recommendedTrackPlaylistID))
+    cleanRecommendations = spotifyDataRetrieval.cleanTrackData(recommendedTracks)
+    cleanRecommendationsWithFeatures = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
 
     previousSetIndex = 0
     for previousTrack in previousTrackList:
@@ -62,8 +80,12 @@ def changeset():
             
             #TODO make this more efficient with mapreduce
             poolIndex = 0
-            for newTrack in cleanMasterTrackPool:
+            for newTrack in cleanRecommendationsWithFeatures:
                 newTrack['audioFeatures']['shouldChange'] = 0
+                #TODO bit of a hack, this prevents track from being moved to different spot in set
+                if newTrack['trackID'] in previousTrackIDs:
+                    newTrack['isUsed'] = True
+                    print(newTrack['trackID'])
                 if newTrack['isUsed'] == True:
                     poolIndex += 1
                     continue
@@ -78,11 +100,7 @@ def changeset():
 
             previousSetIndex+=1
                         
-            cleanMasterTrackPool[poolIndex]['isUsed'] = True
-            
-    # print('########## AFTER')
-    # for pt in previousTrackList:
-    #     print(pt['trackName'])
+            cleanRecommendationsWithFeatures[poolIndex]['isUsed'] = True
 
     return json.dumps(previousTrackList)
 
@@ -101,21 +119,25 @@ def getUserContext():
     profile = spotifyDataRetrieval.profile()
     userName = profile.get("userName")
 
-    #TODO check if we have user in the DB, else build their context
+    #check if we have user in the DB, else build their context
     userContextCollection = db['userContext']
     cursor = userContextCollection.find({})
 
     for userContext in cursor:
         if userName == userContext['userName']:
             print('found the user')
+            #TODO check whem it was last updated, update as needed
             return 'OK'
     
     #assuming we don't find the user, build the context
     #get all user playlists
     allUserPlaylists = spotifyDataRetrieval.currentUserPlaylists()
-    playlistIDs = []
+    playlistObjects = []
     for playlist in allUserPlaylists:
-        playlistIDs.append(spotifyDataRetrieval.URItoID(playlist['uri']))
+        playlistObjects.append({
+            'playlistID':spotifyDataRetrieval.URItoID(playlist['uri']),
+            'playlistName': playlist['playlistName']
+        })
 
     #get top user artists
     shortTermTopArtists = spotifyDataRetrieval.getMyTop(topType='artists', term='short_term', limit=10)
@@ -152,16 +174,16 @@ def getUserContext():
 
     userContext = {
         'userName':userName,
-        'playlistIDs': playlistIDs,
+        'playlists': playlistObjects,
         'topArtists':{
             'shortTerm': shortTermTopArtists,
             'mediumTerm': mediumTermTopArtists,
             'longTerm': longTermTopArtists
         },
         'recommendedTracks': newPlaylistID,
-        'discardedTracks':[],
-        'lastUpdated': 20200712,
-        'currentSet': []
+        'discardedTracks':[], #TODO this
+        'lastUpdated': TODAY,
+        'currentSet': [] #TODO this as part of new tunnel methodology
     }
 
     pymongoResponse = userContextCollection.insert_one(userContext)
@@ -171,13 +193,10 @@ def getUserContext():
 
 @app.route("/getuserplaylists", methods=["POST"])
 def getUserPlaylists():
-    #grab the refresh token from the request body + intialize auth class
-    #spotifyRefreshToken = request.json['refresh_token']
-    #spotifyRefreshToken='AQCQz2XlemifOBzJrHn5ISjHpe9hRoRyulnsyFEFyCYjRTuzCpWmUx78hJS9iPI8xMC0vs7r5xnGBEkiM00sq_Abpuqf1uEsdj6X2UaD4fYgl5msjGYIn5WAG3-WkCPlREM'
+
+    #TODO this can be a method that we reference here instead of repeating
     spotifyRefreshToken = request.json['refresh_token']
     mode = request.json['mode']
-    #mode = request.json['mode']
-
     #using access token, initialize data class
     authorization = auth()
     refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
@@ -186,19 +205,25 @@ def getUserPlaylists():
     profile = spotifyDataRetrieval.profile()
     userName = profile.get("userName")
 
-    allUserPlaylists = spotifyDataRetrieval.currentUserPlaylists()
+    #check if we have user in the DB, else build their context
+    userContextCollection = db['userContext']
+    cursor = userContextCollection.find({})
+
+    thisUserContext = None
+    for userContext in cursor:
+        if userName == userContext['userName']:
+            print('found the user')
+            thisUserContext = userContext
+    
+    #TODO if we don't find the user, create their context
+    # if thisUserContext is None:
+    #     self.getUserContext
+
     outgoingData = {
-        'userPlaylists':[],
+        'userPlaylists':thisUserContext['playlists'],
         'refreshToken': spotifyRefreshToken,
         'mode': mode
         }
-    for playlist in allUserPlaylists:
-        checkboxFormatPlaylist = {
-            'playlistID': spotifyDataRetrieval.URItoID(playlist['uri']),
-            'playlistName':playlist['playlistName']
-            }
-        outgoingData['userPlaylists'].append(checkboxFormatPlaylist)
-
 
     return json.dumps(outgoingData)
 
@@ -206,11 +231,9 @@ def getUserPlaylists():
 @app.route("/data", methods=["POST"])
 def response():
     
-    #grab the refresh token from the request body + intialize auth class
+    #TODO this can be a method that we reference here instead of repeating
     spotifyRefreshToken = request.json['refresh_token']
     mode = request.json['mode']
-    formData = request.json['form_data']
-
     #using access token, initialize data class
     authorization = auth()
     refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
@@ -219,6 +242,17 @@ def response():
     profile = spotifyDataRetrieval.profile()
     userName = profile.get("userName")
 
+    #check if we have user in the DB, else build their context
+    userContextCollection = db['userContext']
+    cursor = userContextCollection.find({})
+
+    thisUserContext = None
+    for userContext in cursor:
+        if userName == userContext['userName']:
+            print('found the user')
+            thisUserContext = userContext
+
+    #tokyo at night color scheme
     colors = ['rgba(94, 177, 208, 1)','rgba(112, 87, 146, 1)','rgba(127, 185, 84, 1)','rgba(199, 115, 73, 1)','rgba(214, 90, 119, 1)','rgba(27, 124, 146, 1)','rgba(177, 180, 198, 1)']
 
     #select mode here CLUSTER or PLAYLIST
@@ -346,16 +380,10 @@ def response():
 
         trackColors = []
 
-        profile = spotifyDataRetrieval.profile()
-        userName = profile.get("userName")
-
         ################################################################
         ###               TUNNEL  BETA                               ###
         ################################################################
 
-        ################################################################
-        ##          STEP ZERO - SET TARGETS                           ##
-        ################################################################
         DJSET = [{'trackName': 'TheWeekend', 'trackId': '1rkrZxfScVaKmHdwo92Hr7', 'artistNames': ['David Puentez'], 'artistIds': ['4gSsv9FQDyXx0GUkZYha7v'], 'audioFeatures': {'danceability': 0.805, 'energy': 0.665, 'key': 6, 'loudness': -4.161, 'mode': 1, 'speechiness': 0.0433, 'acousticness': 0.663, 'instrumentalness': 1.3e-06, 'liveness': 0.135, 'valence': 0.77, 'tempo': 125.935, 'type': 'audio_features', 'id': '1rkrZxfScVaKmHdwo92Hr7', 'uri': 'spotify:track:1rkrZxfScVaKmHdwo92Hr7', 'track_href': 'https://api.spotify.com/v1/tracks/1rkrZxfScVaKmHdwo92Hr7', 'analysis_url': 'https://api.spotify.com/v1/audio-analysis/1rkrZxfScVaKmHdwo92Hr7', 'duration_ms': 139048, 'time_signature': 4}, 'genres': ['progressive electro house']}, {'trackName': 'StringsOfLife-AtfcRemix', 'trackId': '0RQ2U4kyyRpa4GhaK5WZPg', 'artistNames': ['Kanu', 'Jude & Frank', 'ATFC'], 'artistIds': ['7qGg5f7GRoEEDsjhetcseQ', '7rUJV3QhhZJVRucw5BK09x', '04L4Y7Hkc1fULKhFbTnSSs'], 'audioFeatures': {'danceability': 0.636, 'energy': 0.864, 'key': 1, 'loudness': -6.365, 'mode': 1, 'speechiness': 0.0455, 'acousticness': 0.011, 'instrumentalness': 0.454, 'liveness': 0.0484, 'valence': 0.755, 'tempo': 124.984, 'type': 'audio_features', 'id': '0RQ2U4kyyRpa4GhaK5WZPg', 'uri': 'spotify:track:0RQ2U4kyyRpa4GhaK5WZPg', 'track_href': 'https://api.spotify.com/v1/tracks/0RQ2U4kyyRpa4GhaK5WZPg', 'analysis_url': 'https://api.spotify.com/v1/audio-analysis/0RQ2U4kyyRpa4GhaK5WZPg', 'duration_ms': 163322, 'time_signature': 4}, 'genres': ['funky tech house', 'italian tech house', 'chicago house', 'deep house', 'disco house', 'funky tech house', 'house', 'tech house', 'tribal house', 'vocal house']}, {'trackName': 'Dvncefloor', 'trackId': '6lBZpeJ5knvYhsMQArHtOX', 'artistNames': ['Cheyenne Giles', 'Knock2'], 'artistIds': ['2FoyDZAnGzikijRdXrocmj', '6mmSS7itNWKbapgG2eZbIg'], 'audioFeatures': {'danceability': 0.829, 'energy': 0.93, 'key': 10, 'loudness': -3.998, 'mode': 0, 'speechiness': 0.156, 'acousticness': 0.000389, 'instrumentalness': 0.0136, 'liveness': 0.054, 'valence': 0.48, 'tempo': 126.025, 'type': 'audio_features', 'id': '6lBZpeJ5knvYhsMQArHtOX', 'uri': 'spotify:track:6lBZpeJ5knvYhsMQArHtOX', 'track_href': 'https://api.spotify.com/v1/tracks/6lBZpeJ5knvYhsMQArHtOX', 'analysis_url': 'https://api.spotify.com/v1/audio-analysis/6lBZpeJ5knvYhsMQArHtOX', 'duration_ms': 152797, 'time_signature': 4}, 'genres': []}, {'trackName': 'HitTheFlow', 'trackId': '7r2VuLH3NqOu0bXF976eFY', 'artistNames': ['Landis'], 'artistIds': ['7bSDGumYzI7Cehekr534Xn'], 'audioFeatures': {'danceability': 0.817, 'energy': 0.987, 'key': 6, 'loudness': -3.344, 'mode': 0, 'speechiness': 0.231, 'acousticness': 0.0038, 'instrumentalness': 0.0432, 'liveness': 0.33, 'valence': 0.643, 'tempo': 128.002, 'type': 'audio_features', 'id': '7r2VuLH3NqOu0bXF976eFY', 'uri': 'spotify:track:7r2VuLH3NqOu0bXF976eFY', 'track_href': 'https://api.spotify.com/v1/tracks/7r2VuLH3NqOu0bXF976eFY', 'analysis_url': 'https://api.spotify.com/v1/audio-analysis/7r2VuLH3NqOu0bXF976eFY', 'duration_ms': 151875, 'time_signature': 4}, 'genres': ['pop edm']}]
     
         #initialize mapreduce lists - aligned with target tracks
@@ -396,59 +424,31 @@ def response():
         ##    STEP ONE - BUILD POOL OF SUGGESTED TRACKS + MAP         ##
         ################################################################
 
-        #build up list of user top artists
-        topListenType = 'artists'
-        userTopArtists = []
-        userTopArtists.extend(spotifyDataRetrieval.getMyTop(topType=topListenType, term='short_term', limit=5))
-        userTopArtists.extend(spotifyDataRetrieval.getMyTop(topType=topListenType, term='medium_term', limit=5))
-        userTopArtists.extend(spotifyDataRetrieval.getMyTop(topType=topListenType, term='long_term', limit=5))
-        #remove dupes
-        userTopArtists = list(set(userTopArtists))
-        print("Loaded {} user top artists".format(len(userTopArtists)))
+        #grab the pool of recs from spotify
+        recommendedTrackPlaylistID = thisUserContext['recommendedTracks']
+        recommendedTracks = spotifyDataRetrieval.getPlaylistTracks(spotifyDataRetrieval.idToURI("playlist", recommendedTrackPlaylistID))
+        cleanRecommendations = spotifyDataRetrieval.cleanTrackData(recommendedTracks)
+        cleanRecommendationsWithFeatures = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
 
-        # Build up a large pool of options by grabbing suggestions for each
-        # of top artists, target 0 and target 1 to get almost all of pool
-        
-        for artist in userTopArtists:  
-            recommendedTracks = spotifyDataRetrieval.getRecommendations(limit = 100, seed_artists = artist)
-            
-            #continue if we don't get anything back
-            if len(recommendedTracks) == 0 or recommendedTracks == None:
-                continue
-
-            cleanRecommendations = spotifyDataRetrieval.cleanTrackData(recommendedTracks)
-            cleanRecommendationsWithFeatures = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
-            
-            trackPoolAdditions = 0
-            for cleanTrack in cleanRecommendationsWithFeatures:
-                #check if it will dupe
-                if cleanTrack['trackID'] not in cleanMasterTrackPoolIDs:
-                    #calculate distance to each target
-                    cleanTrack['euclideanDistances'] = []
-                    cleanTrack['isUsed'] = False
-                    arrayIndex = 0
-                    for target in newSetTargets:
-                        euclideanDistance = spotifyDataRetrieval.calculateEuclideanDistance(cleanTrack, target, spotifyAudioFeatures, "absValue")
-                        #build a list for each suggested track to each target
-                        cleanTrack['euclideanDistances'].append(euclideanDistance)
-                        #check vs the current closest match
-                        if euclideanDistance < minimumDistances[arrayIndex]:
-                            #make sure we don't dupe a track in the new set
-                            if cleanTrack['trackID'] not in minimumDistanceTrackIDs:
-                                minimumDistances[arrayIndex] = euclideanDistance
-                                cleanTrack['isUsed'] = True
-                                minimumDistanceTracks[arrayIndex] = cleanTrack
-                                minimumDistanceTrackIDs[arrayIndex] = cleanTrack['trackID']
-                        
-                        #check against next target
-                        arrayIndex += 1
-
-                    trackPoolAdditions += 1
-                    cleanMasterTrackPool.append(cleanTrack)
-                    cleanMasterTrackPoolIDs.append(cleanTrack['trackID'])
-            print("Added {} tracks to recommendations pool".format(trackPoolAdditions))
-
-        print("Loaded {} unique track recommendations".format(len(cleanMasterTrackPoolIDs)))
+        for cleanTrack in cleanRecommendationsWithFeatures:
+            #calculate distance to each target
+            cleanTrack['euclideanDistances'] = []
+            cleanTrack['isUsed'] = False
+            arrayIndex = 0
+            for target in newSetTargets:
+                euclideanDistance = spotifyDataRetrieval.calculateEuclideanDistance(cleanTrack, target, spotifyAudioFeatures, "absValue")
+                #build a list for each suggested track to each target
+                cleanTrack['euclideanDistances'].append(euclideanDistance)
+                #check vs the current closest match
+                if euclideanDistance < minimumDistances[arrayIndex]:
+                    #make sure we don't dupe a track in the new set
+                    if cleanTrack['trackID'] not in minimumDistanceTrackIDs:
+                        minimumDistances[arrayIndex] = euclideanDistance
+                        cleanTrack['isUsed'] = True
+                        minimumDistanceTracks[arrayIndex] = cleanTrack
+                        minimumDistanceTrackIDs[arrayIndex] = cleanTrack['trackID']
+                #check against next target
+                arrayIndex += 1
 
     ################################################################
     ##           STEP TWO SEND SET TO FRONTEND                    ##
@@ -456,15 +456,18 @@ def response():
 
     #shared scross all methods
     #assign shouldchange indicator
+    trackIDs = []
     for i in range(len(minimumDistanceTracks)):
         minimumDistanceTracks[i]['audioFeatures']['shouldChange'] = 0
+        trackIDs.append(minimumDistanceTracks[i]['trackID'])
 
     #declare framework for outgoing data
     outgoingData = {
         'spotifyAudioFeatures': spotifyAudioFeatures,
         'rawDataByTrack': minimumDistanceTracks,
         'colors': colors,
-        'mode': mode
+        'mode': mode,
+        'trackIDs': trackIDs
         }
 
     return json.dumps(outgoingData)

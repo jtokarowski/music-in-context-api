@@ -578,6 +578,7 @@ class data:
             completeTrack = incomingTracks[j]
             completeTrack['audioFeatures'] = audioFeaturesData[j]
             completeTrack['genres'] = []
+            completeTrack['isUsed'] = False
             for artistID in completeTrack['artistIDs']:
                 completeTrack['genres'].extend(genresByArtistID[artistID]) 
             trackDataComplete.append(completeTrack)
