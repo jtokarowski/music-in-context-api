@@ -28,10 +28,12 @@ app.config.from_object(__name__)
 # Server-side Parameters based on where it's running
 if ENV == 'dev':
     PORT = 7000
-
-#mongo
-client = MongoClient('localhost', 27017) #TODO make this dynamic based on ENV, link to cloud instance
-db = client.musicInContext
+    client = MongoClient('localhost', 27017)
+    db = client.musicInContext
+elif ENV == 'heroku':
+    MONGODB_URI=os.environ.get('MONGODB_URI')
+    client = MongoClient(MONGODB_URI)
+    db = client[os.environ.get('MONGODB_DBNAME')]
 
 @app.route("/")
 def pingroute():
