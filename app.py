@@ -87,6 +87,7 @@ def changeset():
     previousTrackList = request.json['previousTrackList']
     usedTrackIDs = request.json['previousTrackIDs']
     print(usedTrackIDs)
+    #TODO this
 
     #grab the pool of recs from spotify
     recommendedTrackPlaylistID = thisUserContext['recommendedTracks']
@@ -273,7 +274,7 @@ def response():
     
     #read in form data from request body
     formData = request.json['form_data']
-    
+
     ##################################################
     #TODO this can be a method that we reference here instead of repeating
     spotifyRefreshToken = request.json['refresh_token']
@@ -519,6 +520,8 @@ def response():
 
     #shared scross all methods
     #assign shouldchange indicator
+    print('tracks right before we send to FE')
+    print(minimumDistanceTracks)
     trackIDs = []
     for i in range(len(minimumDistanceTracks)):
         minimumDistanceTracks[i]['audioFeatures']['shouldChange'] = 0
