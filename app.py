@@ -520,12 +520,13 @@ def response():
 
     #shared scross all methods
     #assign shouldchange indicator
-    print('tracks right before we send to FE')
-    print(minimumDistanceTracks)
-    trackIDs = []
-    for i in range(len(minimumDistanceTracks)):
-        minimumDistanceTracks[i]['audioFeatures']['shouldChange'] = 0
-        trackIDs.append(minimumDistanceTracks[i]['trackID'])
+    if mode == "tunnel":
+        trackIDs = []
+        for i in range(len(minimumDistanceTracks)):
+            minimumDistanceTracks[i]['audioFeatures']['shouldChange'] = 0
+            trackIDs.append(minimumDistanceTracks[i]['trackID'])
+    else:
+        trackIDs = ['N/A']
 
     #declare framework for outgoing data
     outgoingData = {
