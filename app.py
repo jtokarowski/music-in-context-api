@@ -65,8 +65,8 @@ def changeset():
 
     #retrieve previous set from request body
     previousTrackList = request.json['previousTrackList']
-    previousTrackIDs = request.json['previousTrackIDs']
-    print(previousTrackIDs)
+    usedTrackIDs = request.json['previousTrackIDs']
+    print(usedTrackIDs)
 
     #grab the pool of recs from spotify
     recommendedTrackPlaylistID = thisUserContext['recommendedTracks']
@@ -85,7 +85,7 @@ def changeset():
             for newTrack in cleanRecommendationsWithFeatures:
                 newTrack['audioFeatures']['shouldChange'] = 0
                 #TODO bit of a hack, this prevents track from being moved to different spot in set
-                if newTrack['trackID'] in previousTrackIDs:
+                if newTrack['trackID'] in usedTrackIDs:
                     newTrack['isUsed'] = True
                     print(newTrack['trackID'])
                 if newTrack['isUsed'] == True:
@@ -98,13 +98,17 @@ def changeset():
                         minED = euclideanDistance
                         minEDIndex = poolIndex
                         previousTrackList[previousSetIndex] = newTrack
+                        usedTrackIDs.append(newTrack['trackID']) 
                         poolIndex += 1
 
             previousSetIndex+=1
                         
             cleanRecommendationsWithFeatures[poolIndex]['isUsed'] = True
 
-    return json.dumps(previousTrackList)
+    return json.dumps({
+        "newTracks": previousTrackList,
+        "trackIDs": usedTrackIDs
+    })
 
 @app.route("/usercontext", methods=["POST"])
 def getUserContext():
@@ -128,7 +132,7 @@ def getUserContext():
     for userContext in cursor:
         if userName == userContext['userName']:
             print('found the user')
-            #TODO check whem it was last updated, update as needed
+            #TODO check when it was last updated, update as needed
             return 'OK'
     
     #assuming we don't find the user, build the context
