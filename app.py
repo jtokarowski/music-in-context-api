@@ -30,10 +30,12 @@ if ENV == 'dev':
     PORT = 7000
     client = MongoClient('localhost', 27017)
     db = client.musicInContext
+    BACKEND_URL = "http://127.0.0.1:7000"
 elif ENV == 'heroku':
     MONGODB_URI=os.environ.get('MONGODB_URI')
     client = MongoClient(MONGODB_URI)
     db = client[os.environ.get('MONGODB_DBNAME')]
+    BACKEND_URL = "https://music-in-context-backend.herokuapp.com"
 
 @app.route("/")
 def pingroute():
@@ -42,6 +44,7 @@ def pingroute():
 @app.route("/changeset", methods=['POST'])
 def changeset():
 
+    ##################################################
     #TODO this can be a method that we reference here instead of repeating
     spotifyRefreshToken = request.json['refresh_token']
     mode = request.json['mode']
@@ -62,6 +65,23 @@ def changeset():
         if userName == userContext['userName']:
             print('found the user')
             thisUserContext = userContext
+
+    if thisUserContext is None:
+        print('could not find user. getting context now.')
+
+        postURL = '{}/usercontext'.format(BACKEND_URL)
+        postRequest = requests.post(postURL, json={'refresh_token': spotifyRefreshToken})
+        
+        print('done creating user context. pulling in now')
+        
+        cursor = userContextCollection.find({})
+
+        for userContext in cursor:
+            if userName == userContext['userName']:
+                print('found the user')
+                thisUserContext = userContext
+
+##################################################
 
     #retrieve previous set from request body
     previousTrackList = request.json['previousTrackList']
@@ -200,6 +220,7 @@ def getUserContext():
 @app.route("/getuserplaylists", methods=["POST"])
 def getUserPlaylists():
 
+##################################################
     #TODO this can be a method that we reference here instead of repeating
     spotifyRefreshToken = request.json['refresh_token']
     mode = request.json['mode']
@@ -220,10 +241,23 @@ def getUserPlaylists():
         if userName == userContext['userName']:
             print('found the user')
             thisUserContext = userContext
-    
-    #TODO if we don't find the user, create their context
-    # if thisUserContext is None:
-    #     self.getUserContext
+
+    if thisUserContext is None:
+        print('could not find user. getting context now.')
+
+        postURL = '{}/usercontext'.format(BACKEND_URL)
+        postRequest = requests.post(postURL, json={'refresh_token': spotifyRefreshToken})
+        
+        print('done creating user context. pulling in now')
+        
+        cursor = userContextCollection.find({})
+
+        for userContext in cursor:
+            if userName == userContext['userName']:
+                print('found the user')
+                thisUserContext = userContext
+
+##################################################
 
     outgoingData = {
         'userPlaylists':thisUserContext['playlists'],
@@ -237,9 +271,14 @@ def getUserPlaylists():
 @app.route("/data", methods=["POST"])
 def response():
     
+    #read in form data from request body
+    formData = request.json['form_data']
+    
+    ##################################################
     #TODO this can be a method that we reference here instead of repeating
     spotifyRefreshToken = request.json['refresh_token']
     mode = request.json['mode']
+
     #using access token, initialize data class
     authorization = auth()
     refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
@@ -257,6 +296,24 @@ def response():
         if userName == userContext['userName']:
             print('found the user')
             thisUserContext = userContext
+
+    if thisUserContext is None:
+        print('could not find user. getting context now.')
+
+        postURL = '{}/usercontext'.format(BACKEND_URL)
+        postRequest = requests.post(postURL, json={'refresh_token': spotifyRefreshToken})
+        
+        print('done creating user context. pulling in now')
+        
+        cursor = userContextCollection.find({})
+
+        for userContext in cursor:
+            if userName == userContext['userName']:
+                print('found the user')
+                thisUserContext = userContext
+
+##################################################
+
 
     #tokyo at night color scheme
     colors = ['rgba(94, 177, 208, 1)','rgba(112, 87, 146, 1)','rgba(127, 185, 84, 1)','rgba(199, 115, 73, 1)','rgba(214, 90, 119, 1)','rgba(27, 124, 146, 1)','rgba(177, 180, 198, 1)']
@@ -477,9 +534,6 @@ def response():
         }
 
     return json.dumps(outgoingData)
-
-
-
 
 #instantiate app
 if __name__ == "__main__":
