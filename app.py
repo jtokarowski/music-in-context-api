@@ -120,36 +120,28 @@ def changeset():
     cleanRecommendations = spotifyDataRetrieval.cleanTrackData(recommendedTracks)
     cleanRecommendationsWithFeatures = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
 
+    #for each track in previous set, check if it needs to be refreshed
     previousSetIndex = 0
     for previousTrack in previousTrackList:
-        
         if previousTrack['audioFeatures']['shouldChange'] == 1:
             minED = 9999999999
-            
             #TODO make this more efficient with mapreduce
-            poolIndex = 0
+
+            #loop through the pool of recommendations to find best fit
             for newTrack in cleanRecommendationsWithFeatures:
                 newTrack['audioFeatures']['shouldChange'] = 0
-                #TODO bit of a hack, this prevents track from being moved to different spot in set
                 if newTrack['trackID'] in usedTrackIDs:
-                    newTrack['isUsed'] = True
-                    print(newTrack['trackID'])
-                if newTrack['isUsed'] == True:
-                    poolIndex += 1
                     continue
                 else:
                     euclideanDistance = spotifyDataRetrieval.calculateEuclideanDistance(newTrack, previousTrack, spotifyAudioFeatures, "absValue")
                     if euclideanDistance < minED:
-                        newTrack['isUsed'] = True #TODO this blocks track from being used elsewhere
+                        #newTrack['isUsed'] = True #TODO this blocks track from being used elsewhere
                         minED = euclideanDistance
-                        minEDIndex = poolIndex
+                        #swap the new track in
                         previousTrackList[previousSetIndex] = newTrack
                         usedTrackIDs.append(newTrack['trackID']) 
-                        poolIndex += 1
 
-            previousSetIndex+=1
-                        
-            cleanRecommendationsWithFeatures[poolIndex]['isUsed'] = True
+        previousSetIndex+=1
 
     #update currentSet field
     userContextCollection = db['userContext']
