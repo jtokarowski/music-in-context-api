@@ -108,7 +108,8 @@ def changeset():
 
     thisUserContext = retrieveUserContext(spotifyRefreshToken)
 
-    #retrieve previous set from request body
+    #retrieve previous set from request body and context object
+    discardedTracks = thisUserContext['discardedTracks']
     previousTrackList = request.json['previousTrackList']
     usedTrackIDs = request.json['previousTrackIDs']
     print(usedTrackIDs)
@@ -124,28 +125,39 @@ def changeset():
     previousSetIndex = 0
     for previousTrack in previousTrackList:
         if previousTrack['audioFeatures']['shouldChange'] == 1:
+            discardedTracks.append(previousTrack['trackID']) #so we don't use it elsewhere
             minED = 9999999999
-            #TODO make this more efficient with mapreduce
-
+            
+            #TODO make this more efficient with mapreduce, also fix the spaghetti code incrementor
             #loop through the pool of recommendations to find best fit
+            stagedTrack = None
             for newTrack in cleanRecommendationsWithFeatures:
                 newTrack['audioFeatures']['shouldChange'] = 0
                 if newTrack['trackID'] in usedTrackIDs:
+                    continue
+                elif newTrack['trackID'] in discardedTracks:
                     continue
                 else:
                     euclideanDistance = spotifyDataRetrieval.calculateEuclideanDistance(newTrack, previousTrack, spotifyAudioFeatures, "absValue")
                     if euclideanDistance < minED:
                         #newTrack['isUsed'] = True #TODO this blocks track from being used elsewhere
                         minED = euclideanDistance
-                        #swap the new track in
-                        previousTrackList[previousSetIndex] = newTrack
-                        usedTrackIDs.append(newTrack['trackID']) 
+                        #stage the new track
+                        stagedTrack = newTrack
+
+                        #TODO remove previous track from used, unless it's in discarded
+                        #Need to add shouldChange songs to discard list
+                        #currentlyInUse can be an indicator, so we don't dupe a track in a set, but can reuse it if it hasn't been sent to FE before
+            #swap the new track in
+            previousTrackList[previousSetIndex] = stagedTrack
+            usedTrackIDs[previousSetIndex] = stagedTrack['trackID']
 
         previousSetIndex+=1
 
     #update currentSet field
     userContextCollection = db['userContext']
     userContextCollection.update_one({'userName': userName}, {"$set": {"currentSet": previousTrackList}})
+    userContextCollection.update_one({'userName': userName}, {"$set": {"discardedTracks": discardedTracks}})
 
     return json.dumps({
         "newTracks": previousTrackList,
