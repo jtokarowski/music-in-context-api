@@ -74,6 +74,26 @@ def retrieveUserContext(spotifyRefreshToken):
 def pingroute():
     return "OK"
 
+@app.route("/commitplaylist")
+def commitplaylist():
+
+    spotifyRefreshToken = request.json['refresh_token']
+    mode = request.json['mode']
+    authorization = auth()
+    refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
+    spotifyAccessToken = refreshedSpotifyTokens['access_token']
+    spotifyDataRetrieval = data(spotifyAccessToken)
+    profile = spotifyDataRetrieval.profile()
+    userName = profile.get("userName")
+
+    thisUserContext = retrieveUserContext(spotifyRefreshToken)
+
+    if mode == 'tunnel':
+        #just commit the one playlist, stored in user context
+        print('comitting')
+
+    return "OK"
+
 @app.route("/changeset", methods=['POST'])
 def changeset():
 
@@ -83,6 +103,8 @@ def changeset():
     refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
     spotifyAccessToken = refreshedSpotifyTokens['access_token']
     spotifyDataRetrieval = data(spotifyAccessToken)
+    profile = spotifyDataRetrieval.profile()
+    userName = profile.get("userName")
 
     thisUserContext = retrieveUserContext(spotifyRefreshToken)
 
@@ -128,6 +150,10 @@ def changeset():
             previousSetIndex+=1
                         
             cleanRecommendationsWithFeatures[poolIndex]['isUsed'] = True
+
+    #update currentSet field
+    userContextCollection = db['userContext']
+    userContextCollection.update_one({'userName': userName}, {"$set": {"currentSet": previousTrackList}})
 
     return json.dumps({
         "newTracks": previousTrackList,
@@ -213,7 +239,7 @@ def getUserContext():
         'recommendedTracks': newPlaylistID,
         'discardedTracks':[], #TODO this
         'lastUpdated': TODAY,
-        'currentSet': [] #TODO this as part of new tunnel methodology
+        'currentSet': "N/A"
     }
 
     pymongoResponse = userContextCollection.insert_one(userContext)
@@ -479,6 +505,12 @@ def response():
                         minimumDistanceTrackIDs[arrayIndex] = cleanTrack['trackID']
                 #check against next target
                 arrayIndex += 1
+
+        
+        #update currentSet field
+        userContextCollection = db['userContext']
+        userContextCollection.update_one({'userName':userName}, {"$set": {"currentSet": minimumDistanceTracks}})
+
 
     ################################################################
     ##                    SEND SET TO FRONTEND                    ##
