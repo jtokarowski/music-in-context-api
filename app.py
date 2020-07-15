@@ -37,18 +37,9 @@ elif ENV == 'heroku':
     db = client[os.environ.get('MONGODB_DBNAME')]
     BACKEND_URL = "https://music-in-context-backend.herokuapp.com"
 
-@app.route("/")
-def pingroute():
-    return "OK"
+def retrieveUserContext(spotifyRefreshToken):
 
-@app.route("/changeset", methods=['POST'])
-def changeset():
-
-    ##################################################
-    #TODO this can be a method that we reference here instead of repeating
-    spotifyRefreshToken = request.json['refresh_token']
-    mode = request.json['mode']
-    #using access token, initialize data class
+    #shared function to retrieve user context from DB or send request to create it
     authorization = auth()
     refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
     spotifyAccessToken = refreshedSpotifyTokens['access_token']
@@ -68,20 +59,32 @@ def changeset():
 
     if thisUserContext is None:
         print('could not find user. getting context now.')
-
         postURL = '{}/usercontext'.format(BACKEND_URL)
-        postRequest = requests.post(postURL, json={'refresh_token': spotifyRefreshToken})
-        
+        postRequest = requests.post(postURL, json={'refresh_token': spotifyRefreshToken})        
         print('done creating user context. pulling in now')
-        
         cursor = userContextCollection.find({})
-
         for userContext in cursor:
             if userName == userContext['userName']:
                 print('found the user')
                 thisUserContext = userContext
 
-##################################################
+    return thisUserContext
+
+@app.route("/")
+def pingroute():
+    return "OK"
+
+@app.route("/changeset", methods=['POST'])
+def changeset():
+
+    spotifyRefreshToken = request.json['refresh_token']
+    mode = request.json['mode']
+    authorization = auth()
+    refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
+    spotifyAccessToken = refreshedSpotifyTokens['access_token']
+    spotifyDataRetrieval = data(spotifyAccessToken)
+
+    thisUserContext = retrieveUserContext(spotifyRefreshToken)
 
     #retrieve previous set from request body
     previousTrackList = request.json['previousTrackList']
@@ -218,47 +221,27 @@ def getUserContext():
 
     return 'OK'
 
+@app.route("/clustertracks", methods=["POST"])
+def clustertracks():
+
+    #this method will run user track recs thru kmeans clustering
+    #then propose different styles to user for their set
+
+    return 'OK'
+
+
+
 @app.route("/getuserplaylists", methods=["POST"])
 def getUserPlaylists():
 
-##################################################
-    #TODO this can be a method that we reference here instead of repeating
     spotifyRefreshToken = request.json['refresh_token']
     mode = request.json['mode']
-    #using access token, initialize data class
     authorization = auth()
     refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
     spotifyAccessToken = refreshedSpotifyTokens['access_token']
     spotifyDataRetrieval = data(spotifyAccessToken)
-    profile = spotifyDataRetrieval.profile()
-    userName = profile.get("userName")
 
-    #check if we have user in the DB, else build their context
-    userContextCollection = db['userContext']
-    cursor = userContextCollection.find({})
-
-    thisUserContext = None
-    for userContext in cursor:
-        if userName == userContext['userName']:
-            print('found the user')
-            thisUserContext = userContext
-
-    if thisUserContext is None:
-        print('could not find user. getting context now.')
-
-        postURL = '{}/usercontext'.format(BACKEND_URL)
-        postRequest = requests.post(postURL, json={'refresh_token': spotifyRefreshToken})
-        
-        print('done creating user context. pulling in now')
-        
-        cursor = userContextCollection.find({})
-
-        for userContext in cursor:
-            if userName == userContext['userName']:
-                print('found the user')
-                thisUserContext = userContext
-
-##################################################
+    thisUserContext = retrieveUserContext(spotifyRefreshToken)
 
     outgoingData = {
         'userPlaylists':thisUserContext['playlists'],
@@ -274,13 +257,9 @@ def response():
     
     #read in form data from request body
     formData = request.json['form_data']
-
-    ##################################################
-    #TODO this can be a method that we reference here instead of repeating
     spotifyRefreshToken = request.json['refresh_token']
     mode = request.json['mode']
 
-    #using access token, initialize data class
     authorization = auth()
     refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
     spotifyAccessToken = refreshedSpotifyTokens['access_token']
@@ -288,33 +267,7 @@ def response():
     profile = spotifyDataRetrieval.profile()
     userName = profile.get("userName")
 
-    #check if we have user in the DB, else build their context
-    userContextCollection = db['userContext']
-    cursor = userContextCollection.find({})
-
-    thisUserContext = None
-    for userContext in cursor:
-        if userName == userContext['userName']:
-            print('found the user')
-            thisUserContext = userContext
-
-    if thisUserContext is None:
-        print('could not find user. getting context now.')
-
-        postURL = '{}/usercontext'.format(BACKEND_URL)
-        postRequest = requests.post(postURL, json={'refresh_token': spotifyRefreshToken})
-        
-        print('done creating user context. pulling in now')
-        
-        cursor = userContextCollection.find({})
-
-        for userContext in cursor:
-            if userName == userContext['userName']:
-                print('found the user')
-                thisUserContext = userContext
-
-##################################################
-
+    thisUserContext = retrieveUserContext(spotifyRefreshToken)
 
     #tokyo at night color scheme
     colors = ['rgba(94, 177, 208, 1)','rgba(112, 87, 146, 1)','rgba(127, 185, 84, 1)','rgba(199, 115, 73, 1)','rgba(214, 90, 119, 1)','rgba(27, 124, 146, 1)','rgba(177, 180, 198, 1)']
@@ -528,7 +481,7 @@ def response():
                 arrayIndex += 1
 
     ################################################################
-    ##           STEP TWO SEND SET TO FRONTEND                    ##
+    ##                    SEND SET TO FRONTEND                    ##
     ################################################################
 
     #shared scross all methods
