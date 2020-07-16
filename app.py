@@ -74,7 +74,7 @@ def retrieveUserContext(spotifyRefreshToken):
 def pingroute():
     return "OK"
 
-@app.route("/commitplaylist")
+@app.route("/commitplaylist", methods=['POST'])
 def commitplaylist():
 
     spotifyRefreshToken = request.json['refresh_token']
@@ -83,6 +83,7 @@ def commitplaylist():
     refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
     spotifyAccessToken = refreshedSpotifyTokens['access_token']
     spotifyDataRetrieval = data(spotifyAccessToken)
+    spotifyCreate = create(spotifyAccessToken)
     profile = spotifyDataRetrieval.profile()
     userName = profile.get("userName")
 
@@ -90,9 +91,27 @@ def commitplaylist():
 
     if mode == 'tunnel':
         #just commit the one playlist, stored in user context
-        print('comitting')
+        print('comitting to spotify')
+        trackURIs = []
+        for track in thisUserContext['currentSet']:
+            trackURIs.append(spotifyDataRetrieval.idToURI("track",track['trackID']))
 
-    return "OK"
+        newPlaylistInfo = spotifyCreate.newPlaylist(userName, "+| Music in Context- tailored deep house set |+", "Inspired by Nora en Pure | Created by Jtokarowski 2020") #TODO pull in genre for set name
+        newPlaylistID = spotifyDataRetrieval.URItoID(newPlaylistInfo['uri'])
+        
+        n = 50 #spotify playlist addition limit
+        for i in range(0, len(trackURIs), n):  
+            playlistTracksSegment = trackURIs[i:i + n]
+            spotifyCreate.addTracks(newPlaylistID, playlistTracksSegment)
+
+        return "OK - committed playlist to spotify"
+    
+    else:
+        return "Error- this mode not supported"
+
+
+
+    
 
 @app.route("/changeset", methods=['POST'])
 def changeset():
@@ -165,9 +184,9 @@ def changeset():
     })
 
 @app.route("/usercontext", methods=["POST"])
-def getUserContext():
+def buildUserContext():
 
-    print('arrived in user context')
+    print('arrived in build user context')
 
     spotifyRefreshToken = request.json['refresh_token']
     #mode = request.json['mode']
@@ -187,6 +206,7 @@ def getUserContext():
         if userName == userContext['userName']:
             print('found the user')
             #TODO check when it was last updated, update as needed
+            #TODO use mongo search rather than a loop
             return 'OK'
     
     #assuming we don't find the user, build the context
