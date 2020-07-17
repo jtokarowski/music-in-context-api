@@ -106,7 +106,7 @@ def commitplaylist():
 
         return "OK - committed playlist to spotify"
     
-    else:
+    else: #TODO make this flexible to support cluster method
         return "Error- this mode not supported"
 
 
