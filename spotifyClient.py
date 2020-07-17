@@ -427,7 +427,7 @@ class data:
 
     def getRecommendations(self, targets=None, market=None, limit=None, seed_artists=None, seed_genres=None, seed_tracks=None):
         #https://developer.spotify.com/documentation/web-api/reference/browse/get-recommendations/
-        #TODO: add funcitonality to examine pool size before and after filters
+        #TODO: add functionality to examine pool size before and after filters
 
         authorizationHeader = {"Authorization": "Bearer {}".format(self.access_token)}
         apiEndpoint = "{}/recommendations?".format(SPOTIFY_API_URL)
@@ -578,6 +578,7 @@ class data:
             completeTrack = incomingTracks[j]
             completeTrack['audioFeatures'] = audioFeaturesData[j]
             completeTrack['genres'] = []
+            completeTrack['isUsed'] = False
             for artistID in completeTrack['artistIDs']:
                 completeTrack['genres'].extend(genresByArtistID[artistID]) 
             trackDataComplete.append(completeTrack)
