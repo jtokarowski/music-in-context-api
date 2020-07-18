@@ -418,7 +418,10 @@ def createSetFromCluster():
 
     #list of indexes from request, map this to userContext, create list of track IDs to be included
     clusterIndexString = request.json['form_data']
+    print("#########")
+    print("HERE")
     print(clusterIndexString)
+    print("#########")
     if ',' in clusterIndexString:
         clusterIDList = clusterIndexString.split(",")
     else:
