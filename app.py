@@ -417,9 +417,10 @@ def createSetFromCluster():
     thisUserContext = retrieveUserContext(spotifyRefreshToken)
 
     #list of indexes from request, map this to userContext, create list of track IDs to be included
-    clusterIndexes = request.json['clusterIndex']
+    clusterIndexString = request.json['form_data']
+    clusterIDList = clusterIndexString.split(",")
     trackIDsForInclusion = []
-    for index in clusterIndexes:
+    for index in clusterIDList:
         selectedCluster = thisUserContext['clusters'][index]
         trackIDsForInclusion.extend(selectedCluster['trackIDs'])
 
