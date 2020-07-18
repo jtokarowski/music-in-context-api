@@ -420,9 +420,13 @@ def createSetFromCluster():
     clusterIndexString = request.json['form_data']
     
     if ',' in clusterIndexString:
-        clusterIDList = clusterIndexString.split(",")
+        clusterIDList = []
+        clusterStringList = clusterIndexString.split(",")
+        for clusterString in clusterStringList:
+            clusterIDList.append(int(clusterIndexString))
+
     else:
-        clusterIDList = [clusterIndexString]
+        clusterIDList = [int(clusterIndexString)]
 
     print("#########")
     print("HERE")
