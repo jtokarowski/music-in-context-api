@@ -8,6 +8,7 @@ import time
 import os
 from flask_cors import CORS
 from pymongo import MongoClient
+from collections import Counter
 
 ENV = os.environ.get('ENV')
 
@@ -261,9 +262,10 @@ def buildUserContext():
             'longTerm': longTermTopArtists
         },
         'recommendedTracks': newPlaylistID,
-        'discardedTracks':[], #TODO this
+        'discardedTracks':[],
         'lastUpdated': TODAY,
-        'currentSet': "N/A"
+        'currentSet': "N/A",
+        'clusters':[]
     }
 
     pymongoResponse = userContextCollection.insert_one(userContext)
@@ -276,10 +278,104 @@ def clustertracks():
 
     #this method will run user track recs thru kmeans clustering
     #then propose different styles to user for their set
+    spotifyRefreshToken = request.json['refresh_token']
+    mode = request.json['mode']
+    authorization = auth()
+    refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
+    spotifyAccessToken = refreshedSpotifyTokens['access_token']
+    spotifyDataRetrieval = data(spotifyAccessToken)
+    profile = spotifyDataRetrieval.profile()
+    userName = profile.get("userName")
 
-    return 'OK'
+    thisUserContext = retrieveUserContext(spotifyRefreshToken)
 
+    if mode == "tunnel":
+        print("Clustering tracks in user recommendation pool")
+        playlistIDs =  [thisUserContext['recommendedTracks']]
+    else:
+        return "Error- This mode is not supported"
+        #TODO make this method accept list of playlists to support OG cluster mode
 
+    masterTrackList = []
+    for playlistID in playlistIDs:
+        tracks = spotifyDataRetrieval.getPlaylistTracks(spotifyDataRetrieval.idToURI("playlist", playlistID))
+        masterTrackList.extend(tracks)
+
+    cleanedMasterTrackList = spotifyDataRetrieval.cleanTrackData(masterTrackList)
+    masterTrackListWithFeatures = spotifyDataRetrieval.getAudioFeatures(cleanedMasterTrackList)
+
+        #set up kmeans, check how many songs
+    if len(masterTrackListWithFeatures)<5:
+        clusters = len(masterTrackListWithFeatures)
+    else:
+        clusters = 5 #TODO make this dynamic
+
+    #send tracklist to statistics class for k-means calcs
+    statistics = stats(masterTrackListWithFeatures)
+    statistics.kMeans(spotifyAudioFeatures, clusters)
+    dataframeWithClusters = statistics.df
+    clusterCenterCoordinates = statistics.centers
+
+    clusterObjects = []
+    clusterIndex = 0
+    #filter dataframe to one cluster
+    for cluster in clusterCenterCoordinates:
+        dataframeFilteredToSingleCluster = dataframeWithClusters.loc[dataframeWithClusters['kMeansAssignment'] == clusterIndex]
+
+        #create cluster info object
+        clusterObject = {}
+        clusterObject['clusterNumber'] = clusterIndex
+        clusterObject['audioFeatureCoordinates'] = {}
+        
+        #grab the genres and artists in the cluster, flatten
+        genres = dataframeFilteredToSingleCluster['genres'].values.tolist()
+        flattenedGenres = []
+        for sublist in genres:
+            for item in sublist:
+                flattenedGenres.append(item)
+        
+        #grab top 3 genres in the cluster
+        topGenres = []
+        genresByFrequency = Counter(flattenedGenres)
+        for genre in genresByFrequency.most_common(3):
+            topGenres.append(genre[0])
+        
+        artistNames = dataframeFilteredToSingleCluster['artistNames'].values.tolist()
+        flattenedArtistNames = []
+        for sublist in artistNames:
+            for item in sublist:
+                flattenedArtistNames.append(item)
+
+        #grab top 3 artists in the cluster
+        topArtists = []
+        artistNamesByFrequency = Counter(flattenedArtistNames)
+        for artist in artistNamesByFrequency.most_common(3):
+            topArtists.append(artist[0])
+
+        #loop thru each audio feature to build up cluster description
+        for j in range(len(cluster)):
+            audioFeatureValue = cluster[j]            
+            clusterObject['audioFeatureCoordinates'][spotifyAudioFeatures[j]] = audioFeatureValue
+
+        clusterObject['mostFrequentArtists'] = topArtists
+        clusterObject['mostFrequentGenres'] = topGenres
+        clusterObject['trackIDs'] = dataframeFilteredToSingleCluster['trackID'].values.tolist()
+
+        #append the new object to a list, proceed to the next cluster
+        clusterObjects.append(clusterObject)
+        clusterIndex+=1
+
+    outgoingData = {
+        'refreshToken': spotifyRefreshToken,
+        'mode': mode,
+        'clusters': clusterObjects
+    }
+
+    #update clusters userContext field to the new list of cluster objects
+    userContextCollection = db['userContext']
+    print(userContextCollection.update_one({'userName':userName}, {"$set": {"clusters": clusterObjects}}))
+
+    return json.dumps(outgoingData)
 
 @app.route("/getuserplaylists", methods=["POST"])
 def getUserPlaylists():
