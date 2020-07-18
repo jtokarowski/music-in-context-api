@@ -420,6 +420,8 @@ def createSetFromCluster():
     clusterIndexString = request.json['form_data']
     print('HERE')
     print(clusterIndexString)
+    tempstr = str(clusterIndexString)
+    print(tempstr.split(","))
     
     if ',' in clusterIndexString:
         clusterIDList = []
