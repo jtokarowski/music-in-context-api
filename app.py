@@ -136,7 +136,7 @@ def changeset():
     #TODO this
 
     #grab the pool of recs from spotify
-    recommendedTrackPlaylistID = thisUserContext['recommendedTracks']
+    recommendedTrackPlaylistID = thisUserContext['filteredTrackPool']
     recommendedTracks = spotifyDataRetrieval.getPlaylistTracks(spotifyDataRetrieval.idToURI("playlist", recommendedTrackPlaylistID))
     cleanRecommendations = spotifyDataRetrieval.cleanTrackData(recommendedTracks)
     cleanRecommendationsWithFeatures = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
