@@ -187,6 +187,9 @@ def changeset():
 @app.route("/usercontext", methods=["POST"])
 def buildUserContext():
 
+    td = date.today()
+    TODAY = td.strftime("%Y%m%d") ##YYYYMMDD
+
     print('arrived in build user context')
 
     spotifyRefreshToken = request.json['refresh_token']
@@ -204,11 +207,15 @@ def buildUserContext():
     cursor = userContextCollection.find({})
 
     for userContext in cursor:
+        #TODO use mongo search rather than a loop
         if userName == userContext['userName']:
             print('found the user')
-            #TODO check when it was last updated, update as needed
-            #TODO use mongo search rather than a loop
-            return 'OK'
+            if userContext['lastUpdated'] == TODAY:
+                return 'OK'
+            else:
+                #remove previous and create new
+                print('outdated user context. updating.')
+                print(userContextCollection.delete_one({'userName':userName}))
     
     #assuming we don't find the user, build the context
     #get all user playlists
