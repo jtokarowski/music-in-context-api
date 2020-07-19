@@ -177,17 +177,23 @@ def changeset():
 
             if euclideanDistance > 20:
                 print("Couldn't find a good match- expanding track pool")
+                print(euclideanDistance)
                 if expandedTrackPool == None:
+                    print('Retrieved expanded track pool')
                     #grab the expanded pool of recs from spotify
                     recommendedTrackPlaylistID = thisUserContext['recommendedTracks']
                     recommendedTracks = spotifyDataRetrieval.getPlaylistTracks(spotifyDataRetrieval.idToURI("playlist", recommendedTrackPlaylistID))
                     cleanRecommendations = spotifyDataRetrieval.cleanTrackData(recommendedTracks)
-                    cleanRecommendationsWithFeatures = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
+                    expandedTrackPool = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
 
-                #find the best fit track in the reduced pool first
-                bestFitTrackResponse = findBestFitTrack(spotifyAccessToken, previousTrack, usedTrackIDs, discardedTrackIDs, trackPool)
+                #find the best fit track in the expanded pool
+                bestFitTrackResponse = findBestFitTrack(spotifyAccessToken, previousTrack, usedTrackIDs, discardedTrackIDs, expandedTrackPool)
                 euclideanDistance = bestFitTrackResponse['euclideanDistance']
                 bestFitTrack = bestFitTrackResponse['bestFitTrack']
+            
+            else:
+                print("Found a match in the smaller pool")
+                print(euclideanDistance)
 
             #swap the new track in
             previousTrackList[previousSetIndex] = bestFitTrack
