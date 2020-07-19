@@ -71,7 +71,9 @@ def retrieveUserContext(spotifyRefreshToken):
 
     return thisUserContext
 
-def findBestFitTrack(target, usedTrackIDs, discardedTrackIDs, trackPool):
+def findBestFitTrack(spotifyAccessToken, target, usedTrackIDs, discardedTrackIDs, trackPool):
+    #shared function to find the track to fit a spot in the set
+    spotifyDataRetrieval = data(spotifyAccessToken)
 
     #this method will be shared across changeSet and createSetFromCluster
     minED = 9999999999
@@ -136,9 +138,6 @@ def commitplaylist():
         return "Error- this mode not supported"
 
 
-
-    
-
 @app.route("/changeset", methods=['POST'])
 def changeset():
 
@@ -162,11 +161,8 @@ def changeset():
     recommendedTrackPlaylistID = thisUserContext['filteredTrackPool']
     recommendedTracks = spotifyDataRetrieval.getPlaylistTracks(spotifyDataRetrieval.idToURI("playlist", recommendedTrackPlaylistID))
     cleanRecommendations = spotifyDataRetrieval.cleanTrackData(recommendedTracks)
-    cleanRecommendationsWithFeatures = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
-
-    #assign the tailored track pool to a temp variable
-    shouldExpandTrackPool = False
-    trackPool = cleanRecommendationsWithFeatures
+    trackPool = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
+    expandedTrackPool = None #placeholder for expanded pool if we need it
 
     #for each track in previous set, check if it needs to be refreshed
     previousSetIndex = 0
@@ -175,39 +171,32 @@ def changeset():
             discardedTrackIDs.append(previousTrack['trackID']) #so we don't use it elsewhere
             
             #find the best fit track in the reduced pool first
-            bestFitTrackResponse = findBestFitTrack(previousTrack, usedTrackIDs, discardedTrackIDs, trackPool)
+            bestFitTrackResponse = findBestFitTrack(spotifyAccessToken, previousTrack, usedTrackIDs, discardedTrackIDs, trackPool)
             euclideanDistance = bestFitTrackResponse['euclideanDistance']
             bestFitTrack = bestFitTrackResponse['bestFitTrack']
 
-            # minED = 9999999999
-            
-            # #TODO make this more efficient with mapreduce, also fix the spaghetti code incrementor
-            # #loop through the pool of recommendations to find best fit
-            # stagedTrack = None
-            # for newTrack in cleanRecommendationsWithFeatures:
-            #     newTrack['audioFeatures']['shouldChange'] = 0
-            #     if newTrack['trackID'] in usedTrackIDs:
-            #         continue
-            #     elif newTrack['trackID'] in discardedTracks:
-            #         continue
-            #     else:
-            #         euclideanDistance = spotifyDataRetrieval.calculateEuclideanDistance(newTrack, previousTrack, spotifyAudioFeatures, "absValue")
-            #         if euclideanDistance < minED:
-            #             #newTrack['isUsed'] = True #TODO this blocks track from being used elsewhere
-            #             minED = euclideanDistance
-            #             #stage the new track
-            #             stagedTrack = newTrack
+            if euclideanDistance > 20:
+                print("Couldn't find a good match- expanding track pool")
+                if expandedTrackPool == None:
+                    #grab the expanded pool of recs from spotify
+                    recommendedTrackPlaylistID = thisUserContext['recommendedTracks']
+                    recommendedTracks = spotifyDataRetrieval.getPlaylistTracks(spotifyDataRetrieval.idToURI("playlist", recommendedTrackPlaylistID))
+                    cleanRecommendations = spotifyDataRetrieval.cleanTrackData(recommendedTracks)
+                    cleanRecommendationsWithFeatures = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
 
-                        #TODO remove previous track from used, unless it's in discarded
-                        #Need to add shouldChange songs to discard list
-                        #currentlyInUse can be an indicator, so we don't dupe a track in a set, but can reuse it if it hasn't been sent to FE before
+                #find the best fit track in the reduced pool first
+                bestFitTrackResponse = findBestFitTrack(spotifyAccessToken, previousTrack, usedTrackIDs, discardedTrackIDs, trackPool)
+                euclideanDistance = bestFitTrackResponse['euclideanDistance']
+                bestFitTrack = bestFitTrackResponse['bestFitTrack']
+
             #swap the new track in
             previousTrackList[previousSetIndex] = bestFitTrack
             usedTrackIDs[previousSetIndex] = bestFitTrack['trackID']
 
+        #iterate to next track in the set
         previousSetIndex+=1
 
-    #update currentSet field
+    #update currentSet field once we're done swapping
     userContextCollection = db['userContext']
     userContextCollection.update_one({'userName': userName}, {"$set": {"currentSet": previousTrackList}})
     userContextCollection.update_one({'userName': userName}, {"$set": {"discardedTracks": discardedTrackIDs}})
