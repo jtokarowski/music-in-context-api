@@ -176,9 +176,7 @@ def changeset():
             euclideanDistance = bestFitTrackResponse['euclideanDistance']
             bestFitTrack = bestFitTrackResponse['bestFitTrack']
 
-            print(euclideanDistance)
-
-            if euclideanDistance > 20:
+            if euclideanDistance > 100:
                 print("Couldn't find a good match- expanding track pool")
                 print("previous minED", euclideanDistance)
                 if expandedTrackPool == None:
