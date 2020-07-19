@@ -87,6 +87,7 @@ def findBestFitTrack(spotifyAccessToken, target, usedTrackIDs, discardedTrackIDs
             continue
         else:
             euclideanDistance = spotifyDataRetrieval.calculateEuclideanDistance(newTrack, target, spotifyAudioFeatures, "absValue")
+            print(euclideanDistance)
             if euclideanDistance < minED:
                 minED = euclideanDistance
                 #stage the new track
@@ -175,9 +176,11 @@ def changeset():
             euclideanDistance = bestFitTrackResponse['euclideanDistance']
             bestFitTrack = bestFitTrackResponse['bestFitTrack']
 
+            print(euclideanDistance)
+
             if euclideanDistance > 20:
                 print("Couldn't find a good match- expanding track pool")
-                print(euclideanDistance)
+                print("previous minED", euclideanDistance)
                 if expandedTrackPool == None:
                     print('Retrieved expanded track pool')
                     #grab the expanded pool of recs from spotify
@@ -190,6 +193,8 @@ def changeset():
                 bestFitTrackResponse = findBestFitTrack(spotifyAccessToken, previousTrack, usedTrackIDs, discardedTrackIDs, expandedTrackPool)
                 euclideanDistance = bestFitTrackResponse['euclideanDistance']
                 bestFitTrack = bestFitTrackResponse['bestFitTrack']
+                print("Found a match in the larger pool")
+                print("minED from largerpool", euclideanDistance)
             
             else:
                 print("Found a match in the smaller pool")
