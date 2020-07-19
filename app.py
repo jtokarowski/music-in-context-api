@@ -71,6 +71,31 @@ def retrieveUserContext(spotifyRefreshToken):
 
     return thisUserContext
 
+def findBestFitTrack(target, usedTrackIDs, discardedTrackIDs, trackPool):
+
+    #this method will be shared across changeSet and createSetFromCluster
+    minED = 9999999999
+    #loop through the pool of recommendations to find best fit
+    stagedTrack = None
+    for newTrack in trackPool:
+        newTrack['audioFeatures']['shouldChange'] = 0
+        if newTrack['trackID'] in usedTrackIDs:
+            continue
+        elif newTrack['trackID'] in discardedTrackIDs:
+            continue
+        else:
+            euclideanDistance = spotifyDataRetrieval.calculateEuclideanDistance(newTrack, target, spotifyAudioFeatures, "absValue")
+            if euclideanDistance < minED:
+                minED = euclideanDistance
+                #stage the new track
+                stagedTrack = newTrack
+
+    return {
+        'bestFitTrack': stagedTrack,
+        'euclideanDistance': minED
+    }
+
+
 @app.route("/")
 def pingroute():
     return "OK"
@@ -129,11 +154,9 @@ def changeset():
     thisUserContext = retrieveUserContext(spotifyRefreshToken)
 
     #retrieve previous set from request body and context object
-    discardedTracks = thisUserContext['discardedTracks']
+    discardedTrackIDs = thisUserContext['discardedTracks']
     previousTrackList = request.json['previousTrackList']
     usedTrackIDs = request.json['previousTrackIDs']
-    print(usedTrackIDs)
-    #TODO this
 
     #grab the pool of recs from spotify
     recommendedTrackPlaylistID = thisUserContext['filteredTrackPool']
@@ -141,43 +164,53 @@ def changeset():
     cleanRecommendations = spotifyDataRetrieval.cleanTrackData(recommendedTracks)
     cleanRecommendationsWithFeatures = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
 
+    #assign the tailored track pool to a temp variable
+    shouldExpandTrackPool = False
+    trackPool = cleanRecommendationsWithFeatures
+
     #for each track in previous set, check if it needs to be refreshed
     previousSetIndex = 0
     for previousTrack in previousTrackList:
         if previousTrack['audioFeatures']['shouldChange'] == 1:
-            discardedTracks.append(previousTrack['trackID']) #so we don't use it elsewhere
-            minED = 9999999999
+            discardedTrackIDs.append(previousTrack['trackID']) #so we don't use it elsewhere
             
-            #TODO make this more efficient with mapreduce, also fix the spaghetti code incrementor
-            #loop through the pool of recommendations to find best fit
-            stagedTrack = None
-            for newTrack in cleanRecommendationsWithFeatures:
-                newTrack['audioFeatures']['shouldChange'] = 0
-                if newTrack['trackID'] in usedTrackIDs:
-                    continue
-                elif newTrack['trackID'] in discardedTracks:
-                    continue
-                else:
-                    euclideanDistance = spotifyDataRetrieval.calculateEuclideanDistance(newTrack, previousTrack, spotifyAudioFeatures, "absValue")
-                    if euclideanDistance < minED:
-                        #newTrack['isUsed'] = True #TODO this blocks track from being used elsewhere
-                        minED = euclideanDistance
-                        #stage the new track
-                        stagedTrack = newTrack
+            #find the best fit track in the reduced pool first
+            bestFitTrackResponse = findBestFitTrack(previousTrack, usedTrackIDs, discardedTrackIDs, trackPool)
+            euclideanDistance = bestFitTrackResponse['euclideanDistance']
+            bestFitTrack = bestFitTrackResponse['bestFitTrack']
+
+            # minED = 9999999999
+            
+            # #TODO make this more efficient with mapreduce, also fix the spaghetti code incrementor
+            # #loop through the pool of recommendations to find best fit
+            # stagedTrack = None
+            # for newTrack in cleanRecommendationsWithFeatures:
+            #     newTrack['audioFeatures']['shouldChange'] = 0
+            #     if newTrack['trackID'] in usedTrackIDs:
+            #         continue
+            #     elif newTrack['trackID'] in discardedTracks:
+            #         continue
+            #     else:
+            #         euclideanDistance = spotifyDataRetrieval.calculateEuclideanDistance(newTrack, previousTrack, spotifyAudioFeatures, "absValue")
+            #         if euclideanDistance < minED:
+            #             #newTrack['isUsed'] = True #TODO this blocks track from being used elsewhere
+            #             minED = euclideanDistance
+            #             #stage the new track
+            #             stagedTrack = newTrack
 
                         #TODO remove previous track from used, unless it's in discarded
                         #Need to add shouldChange songs to discard list
                         #currentlyInUse can be an indicator, so we don't dupe a track in a set, but can reuse it if it hasn't been sent to FE before
             #swap the new track in
-            previousTrackList[previousSetIndex] = stagedTrack
-            usedTrackIDs[previousSetIndex] = stagedTrack['trackID']
+            previousTrackList[previousSetIndex] = bestFitTrack
+            usedTrackIDs[previousSetIndex] = bestFitTrack['trackID']
 
         previousSetIndex+=1
 
     #update currentSet field
     userContextCollection = db['userContext']
     userContextCollection.update_one({'userName': userName}, {"$set": {"currentSet": previousTrackList}})
-    userContextCollection.update_one({'userName': userName}, {"$set": {"discardedTracks": discardedTracks}})
+    userContextCollection.update_one({'userName': userName}, {"$set": {"discardedTracks": discardedTrackIDs}})
 
     return json.dumps({
         "newTracks": previousTrackList,
