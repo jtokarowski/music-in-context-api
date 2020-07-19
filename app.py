@@ -87,7 +87,6 @@ def findBestFitTrack(spotifyAccessToken, target, usedTrackIDs, discardedTrackIDs
             continue
         else:
             euclideanDistance = spotifyDataRetrieval.calculateEuclideanDistance(newTrack, target, spotifyAudioFeatures, "absValue")
-            print(euclideanDistance)
             if euclideanDistance < minED:
                 minED = euclideanDistance
                 #stage the new track
