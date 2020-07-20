@@ -440,6 +440,8 @@ def createSetFromCluster():
 
     #tokyo at night color scheme #TODO move this to front end
     colors = ['rgba(94, 177, 208, 1)','rgba(112, 87, 146, 1)','rgba(127, 185, 84, 1)','rgba(199, 115, 73, 1)','rgba(214, 90, 119, 1)','rgba(27, 124, 146, 1)','rgba(177, 180, 198, 1)']
+    colors = ['rgba(196, 226, 252, 1)','rgba(174, 214, 248, 1)','rgba(15, 134, 239, 1)','rgba(12, 107, 191, 1)','rgba(9, 80, 143, 1)','rgba(6, 53, 95, 1)','rgba(3, 26, 47, 1)']
+
 
     #will create a custom set from the clusters selected stored in usercontext
     spotifyRefreshToken = request.json['refresh_token']
