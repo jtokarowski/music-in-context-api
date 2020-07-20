@@ -237,6 +237,14 @@ class data:
 
         return userInfoClean
 
+    def unfollowPlaylist(self, playlistID):
+
+        authorizationHeader = {"Authorization": "Bearer {}".format(self.access_token)}
+        apiEndpoint = "https://api.spotify.com/v1/playlists/{}/followers".format(playlistID)
+        unfollowResponse = requests.delete(apiEndpoint, headers=authorizationHeader)
+
+        return 'OK, removed playlist from user library'
+
     def currentUserPlaylists(self):
         #https://developer.spotify.com/documentation/web-api/reference/playlists/get-a-list-of-current-users-playlists/
 
