@@ -14,6 +14,10 @@ ENV = os.environ.get('ENV')
 
 # #list of audio features used to fit curve, shared across modes
 spotifyAudioFeatures = ['acousticness','danceability','energy','instrumentalness','liveness','speechiness','valence']
+#tokyo at night color scheme 
+# #TODO move this to front end
+colors = ['rgba(94, 177, 208, 1)','rgba(112, 87, 146, 1)','rgba(127, 185, 84, 1)','rgba(199, 115, 73, 1)','rgba(214, 90, 119, 1)','rgba(27, 124, 146, 1)','rgba(177, 180, 198, 1)']
+colors = ['rgba(196, 226, 252, 1)','rgba(174, 214, 248, 1)','rgba(15, 134, 239, 1)','rgba(12, 107, 191, 1)','rgba(9, 80, 143, 1)','rgba(6, 53, 95, 1)','rgba(3, 26, 47, 1)']
 
 #grab date program is being run
 td = date.today()
@@ -159,11 +163,23 @@ def changeset():
     usedTrackIDs = request.json['previousTrackIDs']
 
     #grab the pool of recs from spotify
-    recommendedTrackPlaylistID = thisUserContext['filteredTrackPool']
-    recommendedTracks = spotifyDataRetrieval.getPlaylistTracks(spotifyDataRetrieval.idToURI("playlist", recommendedTrackPlaylistID))
-    cleanRecommendations = spotifyDataRetrieval.cleanTrackData(recommendedTracks)
-    trackPool = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
-    expandedTrackPool = None #placeholder for expanded pool if we need it
+    if thisUserContext['filteredTrackPool'] is not None:
+        recommendedTrackPlaylistID = thisUserContext['filteredTrackPool']
+        recommendedTracks = spotifyDataRetrieval.getPlaylistTracks(spotifyDataRetrieval.idToURI("playlist", recommendedTrackPlaylistID))
+        cleanRecommendations = spotifyDataRetrieval.cleanTrackData(recommendedTracks)
+        trackPool = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
+        expandedTrackPool = None #placeholder for expanded pool if we need it
+        shouldCheckExpandedPool = True
+    else:
+        recommendedTrackPlaylistID = thisUserContext['recommendedTracks']
+        recommendedTracks = spotifyDataRetrieval.getPlaylistTracks(spotifyDataRetrieval.idToURI("playlist", recommendedTrackPlaylistID))
+        cleanRecommendations = spotifyDataRetrieval.cleanTrackData(recommendedTracks)
+        trackPool = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
+        #expandedTrackPool = trackPool #placeholder for expanded pool if we need it
+        shouldCheckExpandedPool = False
+        
+    
+        
 
     #for each track in previous set, check if it needs to be refreshed
     previousSetIndex = 0
@@ -177,22 +193,23 @@ def changeset():
             bestFitTrack = bestFitTrackResponse['bestFitTrack']
 
             if euclideanDistance > 100:
-                print("Couldn't find a good match- expanding track pool")
-                print("previous minED", euclideanDistance)
-                if expandedTrackPool == None:
-                    print('Retrieving expanded track pool')
-                    #grab the expanded pool of recs from spotify
-                    recommendedTrackPlaylistID = thisUserContext['recommendedTracks']
-                    recommendedTracks = spotifyDataRetrieval.getPlaylistTracks(spotifyDataRetrieval.idToURI("playlist", recommendedTrackPlaylistID))
-                    cleanRecommendations = spotifyDataRetrieval.cleanTrackData(recommendedTracks)
-                    expandedTrackPool = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
+                if shouldCheckExpandedPool is True:
+                    print("Couldn't find a good match- expanding track pool")
+                    print("previous minED", euclideanDistance)
+                    if expandedTrackPool == None:
+                        print('Retrieving expanded track pool')
+                        #grab the expanded pool of recs from spotify
+                        recommendedTrackPlaylistID = thisUserContext['recommendedTracks']
+                        recommendedTracks = spotifyDataRetrieval.getPlaylistTracks(spotifyDataRetrieval.idToURI("playlist", recommendedTrackPlaylistID))
+                        cleanRecommendations = spotifyDataRetrieval.cleanTrackData(recommendedTracks)
+                        expandedTrackPool = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
 
-                #find the best fit track in the expanded pool
-                bestFitTrackResponse = findBestFitTrack(spotifyAccessToken, previousTrack, usedTrackIDs, discardedTrackIDs, expandedTrackPool)
-                euclideanDistance = bestFitTrackResponse['euclideanDistance']
-                bestFitTrack = bestFitTrackResponse['bestFitTrack']
-                print("Found a match in the larger pool")
-                print("minED from largerpool", euclideanDistance)
+                    #find the best fit track in the expanded pool
+                    bestFitTrackResponse = findBestFitTrack(spotifyAccessToken, previousTrack, usedTrackIDs, discardedTrackIDs, expandedTrackPool)
+                    euclideanDistance = bestFitTrackResponse['euclideanDistance']
+                    bestFitTrack = bestFitTrackResponse['bestFitTrack']
+                    print("Found a match in the larger pool")
+                    print("minED from largerpool", euclideanDistance)
             
             else:
                 print("Found a match in the smaller pool")
@@ -309,9 +326,9 @@ def buildUserContext():
         'recommendedTracks': newPlaylistID,
         'discardedTracks':[],
         'lastUpdated': TODAY,
-        'currentSet': "N/A",
+        'currentSet': None,
         'filteredTrackPool': None,
-        'clusters':[]
+        'clusters': None
     }
 
     pymongoResponse = userContextCollection.insert_one(userContext)
@@ -443,13 +460,51 @@ def getUserPlaylists():
 
     return json.dumps(outgoingData)
 
+@app.route("/setfromplaylist", methods=["POST"])
+def createSetFromPlaylist():
+
+    print("entering PLAYLIST mode")
+    #will create a custom set from the clusters selected stored in usercontext
+    spotifyRefreshToken = request.json['refresh_token']
+    mode = request.json['mode']
+    playlistID = request.json['form_data']
+    authorization = auth()
+    refreshedSpotifyTokens = authorization.refreshAccessToken(spotifyRefreshToken)
+    spotifyAccessToken = refreshedSpotifyTokens['access_token']
+    spotifyDataRetrieval = data(spotifyAccessToken)
+    profile = spotifyDataRetrieval.profile()
+    userName = profile.get("userName")
+
+    thisUserContext = retrieveUserContext(spotifyRefreshToken)
+
+    #retrieve songs and audio features for user selected playlist
+    tracks = spotifyDataRetrieval.getPlaylistTracks(spotifyDataRetrieval.idToURI("playlist", playlistID))
+    cleanedMasterTrackList = spotifyDataRetrieval.cleanTrackData(tracks)
+    playlistTracksWithFeatures = spotifyDataRetrieval.getAudioFeatures(cleanedMasterTrackList)
+
+    #update currentSet field
+    userContextCollection = db['userContext']
+    print(userContextCollection.update_one({'userName':userName}, {"$set": {"currentSet": playlistTracksWithFeatures}}))
+
+    trackIDs = []
+    for i in range(len(playlistTracksWithFeatures)):
+        playlistTracksWithFeatures[i]['audioFeatures']['shouldChange'] = 0
+        trackIDs.append(playlistTracksWithFeatures[i]['trackID'])
+
+    #declare framework for outgoing data
+    outgoingData = {
+        'spotifyAudioFeatures': spotifyAudioFeatures,
+        'rawDataByTrack': playlistTracksWithFeatures,
+        'colors': colors,
+        'mode': mode,
+        'trackIDs': trackIDs
+        }
+
+    return json.dumps(outgoingData)
+
+
 @app.route("/setfromcluster", methods=["POST"])
 def createSetFromCluster():
-
-    #tokyo at night color scheme #TODO move this to front end
-    colors = ['rgba(94, 177, 208, 1)','rgba(112, 87, 146, 1)','rgba(127, 185, 84, 1)','rgba(199, 115, 73, 1)','rgba(214, 90, 119, 1)','rgba(27, 124, 146, 1)','rgba(177, 180, 198, 1)']
-    colors = ['rgba(196, 226, 252, 1)','rgba(174, 214, 248, 1)','rgba(15, 134, 239, 1)','rgba(12, 107, 191, 1)','rgba(9, 80, 143, 1)','rgba(6, 53, 95, 1)','rgba(3, 26, 47, 1)']
-
 
     #will create a custom set from the clusters selected stored in usercontext
     spotifyRefreshToken = request.json['refresh_token']
@@ -506,7 +561,7 @@ def createSetFromCluster():
         for i in range(0, len(filteredPoolTrackURIs), n):  
             spotifyCreate.addTracks(newPlaylistID, filteredPoolTrackURIs[i:i + n])
 
-    #update currentSet field
+    #update filteredTrackPool field
     userContextCollection = db['userContext']
     print(userContextCollection.update_one({'userName':userName}, {"$set": {"filteredTrackPool": newPlaylistID}}))
 
