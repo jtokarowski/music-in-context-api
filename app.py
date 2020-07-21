@@ -129,7 +129,7 @@ def commitplaylist():
         for track in thisUserContext['currentSet']:
             trackURIs.append(spotifyDataRetrieval.idToURI("track",track['trackID']))
 
-        newPlaylistInfo = spotifyCreate.newPlaylist(userName, "+| Music in Context- tailored deep house set |+", "Inspired by Nora en Pure | Created by Jtokarowski 2020") #TODO pull in genre for set name
+        newPlaylistInfo = spotifyCreate.newPlaylist(userName, "+| Music in Context - Custom Playlist |+", " | Created by Jtokarowski 2020") #TODO pull in genre for set name
         newPlaylistID = spotifyDataRetrieval.URItoID(newPlaylistInfo['uri'])
         
         n = 50 #spotify playlist addition limit
