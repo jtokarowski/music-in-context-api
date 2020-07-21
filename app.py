@@ -247,8 +247,10 @@ def buildUserContext():
                 
                 print('outdated user context. updating.')
                 #remove the outdated pool so we don't dupe
-                if thisUserContext['recommendedTracks'] is not None:
-                    print(spotifyDataRetrieval.unfollowPlaylist(thisUserContext['recommendedTracks']))
+                if userContext['recommendedTracks'] is not None:
+                    print(spotifyDataRetrieval.unfollowPlaylist(userContext['recommendedTracks']))
+                if userContext['filteredTrackPool'] is not None:
+                    print(spotifyDataRetrieval.unfollowPlaylist(userContext['filteredTrackPool']))
                 
                 #remove previous userand create new
                 print(userContextCollection.delete_one({'userName':userName}))
