@@ -122,25 +122,21 @@ def commitplaylist():
 
     thisUserContext = retrieveUserContext(spotifyRefreshToken)
 
-    if mode == 'tunnel':
-        #just commit the one playlist, stored in user context
-        print('comitting to spotify')
-        trackURIs = []
-        for track in thisUserContext['currentSet']:
-            trackURIs.append(spotifyDataRetrieval.idToURI("track",track['trackID']))
+    #just commit the one playlist, stored in user context
+    print('comitting to spotify')
+    trackURIs = []
+    for track in thisUserContext['currentSet']:
+        trackURIs.append(spotifyDataRetrieval.idToURI("track",track['trackID']))
 
-        newPlaylistInfo = spotifyCreate.newPlaylist(userName, "+| Music in Context - Custom Playlist |+", " | Created by Jtokarowski 2020") #TODO pull in genre for set name
-        newPlaylistID = spotifyDataRetrieval.URItoID(newPlaylistInfo['uri'])
-        
-        n = 50 #spotify playlist addition limit
-        for i in range(0, len(trackURIs), n):  
-            playlistTracksSegment = trackURIs[i:i + n]
-            spotifyCreate.addTracks(newPlaylistID, playlistTracksSegment)
-
-        return "OK - committed playlist to spotify"
+    newPlaylistInfo = spotifyCreate.newPlaylist(userName, "+| Music in Context - Custom Playlist |+", " | Created by Jtokarowski 2020") #TODO pull in genre for set name
+    newPlaylistID = spotifyDataRetrieval.URItoID(newPlaylistInfo['uri'])
     
-    else: #TODO make this flexible to support cluster method
-        return "Error- this mode not supported"
+    n = 50 #spotify playlist addition limit
+    for i in range(0, len(trackURIs), n):  
+        playlistTracksSegment = trackURIs[i:i + n]
+        spotifyCreate.addTracks(newPlaylistID, playlistTracksSegment)
+
+    return "OK - committed playlist to spotify"
 
 
 @app.route("/changeset", methods=['POST'])
@@ -177,8 +173,6 @@ def changeset():
         trackPool = spotifyDataRetrieval.getAudioFeatures(cleanRecommendations)
         #expandedTrackPool = trackPool #placeholder for expanded pool if we need it
         shouldCheckExpandedPool = False
-        
-    
         
 
     #for each track in previous set, check if it needs to be refreshed
