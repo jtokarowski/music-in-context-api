@@ -20,10 +20,10 @@ class stats:
             artistNames = song['artistNames']
             artistIDs = song['artistIDs']
 
-            if len(artistNames)==1:
-                song['artistNames'] =artistNames[0]
-            else:
-                song['artistNames'] = ",".join(artistNames)
+            # if len(artistNames)==1:
+            #     song['artistNames'] =artistNames[0]
+            # else:
+            #     song['artistNames'] = ",".join(artistNames)
 
             if len(artistIDs)==1:
                 song['artistIDs'] = artistIDs[0]
