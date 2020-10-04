@@ -290,7 +290,7 @@ def buildUserContext():
     #build a pool of recommendations
     recommendedTrackURIs = []
     for artist in userTopArtists:  
-        recommendedTracks = spotifyDataRetrieval.getRecommendations(limit = 20, seed_artists = artist)
+        recommendedTracks = spotifyDataRetrieval.getRecommendations(limit = 20, seed_artists = artist, targets={"min_popularity": 40})
         if len(recommendedTracks) == 0 or recommendedTracks == None:
             continue
         else:
